@@ -157,9 +157,47 @@ Ruta en la app: `Mi Perfil -> Guía de Uso Completa` (`/auth/user-guide`).
 
 Incluye:
 - Flujo completo de rendición paso a paso.
+- Roles/perfiles y alcance por tipo de usuario.
+- Operación del panel administrativo.
+- Configuración y uso de flujos de aprobación.
 - Reglas y señales del score antifraude.
 - Buenas prácticas para evitar rechazos.
 - Uso de API Keys para agentes IA.
+
+## Roles y perfiles
+
+Roles disponibles:
+- `employee`: crea gastos y rendiciones propias.
+- `manager`: revisa/decide rendiciones según flujo y jerarquía.
+- `approver` / `reviewer`: participan en pasos definidos por flujo.
+- `admin` / `superadmin`: acceso a administración completa.
+
+Acceso administrativo (`/admin`) requiere rol `admin` o `superadmin`.
+
+## Flujos de aprobación y administración
+
+### Flujos de aprobación
+
+Ruta: `Admin -> Flujos` (`/admin/flows`).
+
+Cada flujo permite:
+- Definir regla de activación (ej. `min_amount`).
+- Configurar pasos secuenciales de aprobación.
+- Asignar aprobadores por:
+  - `role` (rol específico),
+  - `user` (usuario específico),
+  - `manager` (jefe directo del solicitante).
+
+### Administración
+
+Ruta: `/admin`.
+
+Módulos principales:
+- `Usuarios`: crear/editar/eliminar, rol, manager, centro de costo.
+- `Centros de costo`: código y presupuesto mensual.
+- `Flujos`: diseño de pipeline de aprobación.
+- `Branding`: nombre app, logo y dominio por defecto de usuarios.
+- `Auditoría`: historial de acciones.
 
 ## OCR y comportamiento de gastos
 

@@ -8,7 +8,8 @@
         <h1 class="text-2xl font-bold text-gray-900">Guía de Uso Completa</h1>
         <p class="text-gray-600 mt-2">
             Esta guía explica cómo usar {{ brand_app_name }} de punta a punta: crear gastos, subir boletas,
-            entender validaciones antifraude, armar rendiciones y usar API Keys.
+            entender validaciones antifraude, armar rendiciones, operar flujos de aprobación, administrar la plataforma
+            y usar API Keys.
         </p>
     </div>
 
@@ -68,7 +69,75 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">5. Estados y alertas</h2>
+        <h2 class="text-xl font-bold text-gray-900">5. Roles y perfiles</h2>
+        <p class="text-gray-700">
+            El acceso a menús y acciones depende del rol asignado al usuario.
+        </p>
+        <div class="overflow-x-auto border border-gray-100 rounded-xl">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50/70 text-gray-600">
+                    <tr>
+                        <th class="px-4 py-3 text-left font-semibold">Rol</th>
+                        <th class="px-4 py-3 text-left font-semibold">Capacidades principales</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 text-gray-700">
+                    <tr>
+                        <td class="px-4 py-3 font-semibold">Employee</td>
+                        <td class="px-4 py-3">Crear gastos, crear/enviar rendiciones propias, ver estado y observaciones.</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold">Manager</td>
+                        <td class="px-4 py-3">Revisar y aprobar/rechazar rendiciones según flujo, visibilidad ampliada de equipo.</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold">Approver / Reviewer</td>
+                        <td class="px-4 py-3">Participar como aprobador en pasos configurados por rol o por usuario.</td>
+                    </tr>
+                    <tr>
+                        <td class="px-4 py-3 font-semibold">Admin / Superadmin</td>
+                        <td class="px-4 py-3">Administración completa: usuarios, centros de costo, flujos, branding y auditoría.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">6. Flujos de aprobación</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Ruta:</strong> <code>Admin -> Flujos</code>.</p>
+            <p>
+                Cada flujo puede activarse según reglas (por ejemplo monto mínimo) y se compone de pasos secuenciales.
+            </p>
+            <p><strong>Tipos de aprobador por paso:</strong></p>
+            <ul class="list-disc pl-6 space-y-1">
+                <li><code>role</code>: aprueba un rol específico (ej: manager, admin).</li>
+                <li><code>user</code>: aprueba un usuario específico.</li>
+                <li><code>manager</code>: aprueba el jefe directo del solicitante.</li>
+            </ul>
+            <p>
+                Al enviar una rendición, el sistema selecciona el flujo aplicable y notifica al aprobador del paso actual.
+            </p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">7. Administración (Admin/Superadmin)</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Ruta:</strong> <code>Admin</code>.</p>
+            <ul class="list-disc pl-6 space-y-1">
+                <li><strong>Usuarios:</strong> alta, edición, eliminación, asignación de rol, manager y centro de costo.</li>
+                <li><strong>Centros de costo:</strong> creación/edición con código y presupuesto.</li>
+                <li><strong>Flujos:</strong> diseño del pipeline de aprobación por pasos.</li>
+                <li><strong>Branding:</strong> nombre de app, logo y dominio por defecto de usuarios.</li>
+                <li><strong>Auditoría:</strong> trazabilidad de acciones administrativas y operativas.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">8. Estados y alertas</h2>
         <ul class="list-disc pl-6 space-y-2 text-gray-700">
             <li><strong>Borrador:</strong> gasto creado, aún no enviado en rendición.</li>
             <li><strong>Enviado:</strong> está dentro de una rendición en proceso de aprobación.</li>
@@ -78,7 +147,7 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">6. API Keys para agentes IA</h2>
+        <h2 class="text-xl font-bold text-gray-900">9. API Keys para agentes IA</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Mi Perfil -> API Keys para Agentes IA</code>.</p>
             <p>
@@ -94,7 +163,7 @@
     </div>
 
     <div class="card space-y-3">
-        <h2 class="text-xl font-bold text-gray-900">7. Buenas prácticas para evitar rechazos</h2>
+        <h2 class="text-xl font-bold text-gray-900">10. Buenas prácticas para evitar rechazos</h2>
         <ul class="list-disc pl-6 space-y-2 text-gray-700">
             <li>Rinde apenas ocurre el gasto (mejor score y mejor trazabilidad).</li>
             <li>No edites manualmente comercio/fecha/hora si la boleta ya fue leída correctamente.</li>
