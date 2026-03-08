@@ -85,6 +85,12 @@ def logout():
     flash('Has cerrado la sesión.', 'info')
     return redirect(url_for('auth.login'))
 
+
+@auth_bp.route('/user-guide')
+@login_required
+def user_guide():
+    return render_template('auth/user_guide.html')
+
 @auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():

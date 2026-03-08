@@ -120,6 +120,13 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
                         <input type="date" name="date" id="date" class="input" required>
+                        <p class="mt-1 text-xs text-gray-500">Se valida contra fecha boleta (formato regional DD/MM/YYYY).</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Hora boleta</label>
+                        <input type="time" name="receipt_time" id="receipt_time" class="input">
+                        <p class="mt-1 text-xs text-gray-500">Se compara con la hora de rendición (margen 20 min).</p>
                     </div>
 
                     <div>
@@ -138,7 +145,39 @@
                             placeholder="Explica el motivo del gasto (Mínimo 15 caracteres)" minlength="15"
                             required></textarea>
                     </div>
+
+                    <div class="md:col-span-2">
+                        <div class="rounded-2xl border p-4"
+                            :class="hasGpsFix() ? 'border-success/30 bg-success/5' : 'border-warning/30 bg-warning/5'">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-800">Ubicación GPS obligatoria</p>
+                                    <p class="text-xs text-gray-500">Debes activar ubicación para rendir el gasto.</p>
+                                </div>
+                                <button type="button" class="btn-outline !px-3 !py-1.5 !text-xs"
+                                    @click="requestLocation(true)" :disabled="gpsIsLoading">
+                                    <span x-text="gpsIsLoading ? 'Capturando...' : 'Reintentar GPS'"></span>
+                                </button>
+                            </div>
+                            <p class="mt-3 text-sm" :class="hasGpsFix() ? 'text-success-dark' : 'text-warning-dark'"
+                                x-text="gpsStatusMessage"></p>
+                            <p class="mt-1 text-xs text-gray-500" x-show="gpsLatitude && gpsLongitude">
+                                Lat: <span x-text="gpsLatitude"></span> |
+                                Lon: <span x-text="gpsLongitude"></span> |
+                                Precisión: <span x-text="gpsAccuracyM || 'n/d'"></span> m
+                            </p>
+                            <p class="mt-1 text-xs text-gray-500" x-show="gpsAddress">
+                                Dirección: <span x-text="gpsAddress"></span>
+                            </p>
+                        </div>
+                    </div>
                 </div>
+
+                <input type="hidden" name="gps_latitude" :value="gpsLatitude || ''">
+                <input type="hidden" name="gps_longitude" :value="gpsLongitude || ''">
+                <input type="hidden" name="gps_accuracy_m" :value="gpsAccuracyM || ''">
+                <input type="hidden" name="gps_captured_at" :value="gpsCapturedAt || ''">
+                <input type="hidden" name="gps_address" :value="gpsAddress || ''">
 
                 <div class="pt-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3">
                     <a href="{{ url_for('expenses.index') }}" class="btn-outline">Cancelar</a>
@@ -159,6 +198,13 @@
             ocrMessage: '',
             ocrMessageType: 'info',
             previewModalOpen: false,
+            gpsLatitude: '',
+            gpsLongitude: '',
+            gpsAccuracyM: '',
+            gpsCapturedAt: '',
+            gpsAddress: '',
+            gpsIsLoading: false,
+            gpsStatusMessage: 'Buscando ubicación GPS...',
 
             clearPreview() {
                 if (this.imagePreviewUrl && this.imagePreviewUrl.startsWith('blob:')) {
@@ -197,6 +243,8 @@
                 this.selectedFile = null;
                 this.ocrMessage = '';
                 this.ocrMessageType = 'info';
+                this.resetGpsState();
+                this.requestLocation(false);
                 window.addEventListener('pageshow', () => {
                     this.isExtracting = false;
                     this.fileName = '';
@@ -204,9 +252,104 @@
                     this.selectedFile = null;
                     this.ocrMessage = '';
                     this.ocrMessageType = 'info';
+                    this.resetGpsState();
+                    this.requestLocation(false);
                     const receiptInput = document.getElementById('receipt');
                     if (receiptInput) receiptInput.value = '';
                 });
+            },
+
+            resetGpsState() {
+                this.gpsLatitude = '';
+                this.gpsLongitude = '';
+                this.gpsAccuracyM = '';
+                this.gpsCapturedAt = '';
+                this.gpsAddress = '';
+                this.gpsIsLoading = false;
+                this.gpsStatusMessage = 'Buscando ubicación GPS...';
+            },
+
+            hasGpsFix() {
+                return Boolean(this.gpsLatitude && this.gpsLongitude);
+            },
+
+            requestLocation(forcePrompt = false) {
+                if (!navigator.geolocation) {
+                    this.gpsStatusMessage = 'Este navegador no soporta geolocalización.';
+                    return Promise.resolve(false);
+                }
+                if (this.gpsIsLoading) {
+                    return Promise.resolve(false);
+                }
+
+                this.gpsIsLoading = true;
+                this.gpsStatusMessage = 'Capturando ubicación GPS...';
+
+                return new Promise((resolve) => {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            this.gpsLatitude = Number(position.coords.latitude).toFixed(7);
+                            this.gpsLongitude = Number(position.coords.longitude).toFixed(7);
+                            this.gpsAccuracyM = Number(position.coords.accuracy || 0).toFixed(1);
+                            this.gpsCapturedAt = new Date().toISOString();
+                            this.gpsAddress = '';
+                            this.gpsStatusMessage = 'Ubicación capturada correctamente.';
+                            this.gpsIsLoading = false;
+                            this.resolveGpsAddress();
+                            resolve(true);
+                        },
+                        (error) => {
+                            if (error.code === 1) {
+                                this.gpsStatusMessage = 'Permiso de ubicación denegado. Debes habilitarlo para continuar.';
+                            } else if (error.code === 2) {
+                                this.gpsStatusMessage = 'No fue posible obtener tu ubicación actual.';
+                            } else if (error.code === 3) {
+                                this.gpsStatusMessage = 'Tiempo de espera agotado al capturar GPS.';
+                            } else {
+                                this.gpsStatusMessage = 'Error al capturar ubicación GPS.';
+                            }
+                            this.gpsIsLoading = false;
+                            resolve(false);
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            timeout: forcePrompt ? 20000 : 10000,
+                            maximumAge: 0
+                        }
+                    );
+                });
+            },
+
+            async resolveGpsAddress() {
+                if (!this.hasGpsFix()) return;
+                try {
+                    const response = await fetch('{{ url_for("expenses.reverse_geocode_lookup") }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            latitude: this.gpsLatitude,
+                            longitude: this.gpsLongitude
+                        })
+                    });
+                    if (!response.ok) return;
+                    const payload = await response.json();
+                    if (payload.address) {
+                        this.gpsAddress = payload.address;
+                    }
+                } catch (_) {}
+            },
+
+            normalizeTimeForInput(value) {
+                if (!value) return '';
+                const raw = String(value).trim();
+                const match = raw.match(/^(\d{1,2})[:.](\d{2})(?::\d{2})?$/);
+                if (!match) return raw;
+                const hh = match[1].padStart(2, '0');
+                const mm = match[2];
+                return `${hh}:${mm}`;
             },
 
             handleFileUpload(event) {
@@ -283,6 +426,10 @@
                         document.getElementById('date').value = result.date;
                         updatedFields += 1;
                     }
+                    if (result.time) {
+                        document.getElementById('receipt_time').value = this.normalizeTimeForInput(result.time);
+                        updatedFields += 1;
+                    }
                     if (result.category_id) {
                         document.getElementById('category_id').value = result.category_id;
                         updatedFields += 1;
@@ -304,11 +451,18 @@
                 }
             },
 
-            submitForm() {
+            async submitForm() {
                 const form = this.$root.querySelector('form');
                 if (!form.checkValidity()) {
                     form.reportValidity();
                     return;
+                }
+                if (!this.hasGpsFix()) {
+                    const locationOk = await this.requestLocation(true);
+                    if (!locationOk || !this.hasGpsFix()) {
+                        alert('Debes activar GPS para rendir este gasto.');
+                        return;
+                    }
                 }
                 form.submit();
             }

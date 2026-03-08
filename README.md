@@ -8,18 +8,24 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría).
 - Normalización de montos para formato local (CLP): separador de miles y decimales.
 - Detección de duplicados por hash de imagen y por monto/fecha.
+- GPS obligatorio al crear gastos (captura de coordenadas + dirección aproximada).
+- Validación antifraude con score combinado (`match`, `partial`, `mismatch`):
+  comercio↔ubicación + fecha boleta↔rendición + hora boleta↔rendición (margen 20 min).
+  Incluye además regla horaria habitual: L-V entre 09:00 y 19:00.
 - Informes de rendición con múltiples gastos.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
 - Branding por empresa: nombre de app, logo y dominio por defecto para emails de usuarios.
 - Selector de temas visuales (Executive / Paper / Midnight).
+- Guía funcional de uso integrada para usuarios desde `Mi Perfil`.
 
 ## Stack técnico
 
 - Backend: Flask 3, SQLAlchemy, Flask-Login, Flask-Migrate, Flask-Mail, Flask-Limiter.
 - Base de datos: PostgreSQL.
 - Frontend: Jinja2 + Alpine.js + UnoCSS.
+- Geocodificación: OpenStreetMap Nominatim (reverse geocoding de coordenadas).
 - OCR IA: OpenRouter (SDK `openai`).
 - Exportación: ReportLab (PDF).
 - Infra: Docker + Docker Compose.
@@ -145,12 +151,38 @@ Para consumir la API con una key:
 Authorization: Bearer rfk_...
 ```
 
+### Guía funcional para usuarios
+
+Ruta en la app: `Mi Perfil -> Guía de Uso Completa` (`/auth/user-guide`).
+
+Incluye:
+- Flujo completo de rendición paso a paso.
+- Reglas y señales del score antifraude.
+- Buenas prácticas para evitar rechazos.
+- Uso de API Keys para agentes IA.
+
 ## OCR y comportamiento de gastos
 
 - El análisis se dispara automáticamente al seleccionar un archivo en “Nuevo Gasto”.
 - Si OCR no detecta campos, el formulario sigue disponible para carga manual.
 - El endpoint de extracción es `POST /expenses/extract-data`.
 - Archivos se guardan localmente en `app/static/uploads`.
+- OCR intenta extraer fecha en formato regional `DD/MM/YYYY` y hora `HH:MM` cuando exista.
+
+## GPS obligatorio en gastos
+
+- `Nuevo Gasto` exige geolocalización activa (latitud/longitud obligatorias).
+- Se guarda precisión GPS, timestamp de captura y dirección aproximada.
+- La app calcula coherencia para alertar posibles fraudes:
+  - Comercio vs dirección GPS.
+  - Fecha de boleta vs fecha de rendición.
+  - Hora de boleta vs hora de rendición (20 min de margen).
+  - Horario habitual de operación: L-V 09:00 a 19:00 (fin de semana/fuera de horario suma riesgo).
+  - Si cae en fin de semana o fuera de horario, la validación nunca queda en `match` (baja al menos a `partial`).
+- `match`: alta coherencia.
+- `partial`: coherencia parcial.
+- `mismatch`: potencial riesgo.
+- Nota: en navegador, geolocalización requiere contexto seguro (HTTPS) o `localhost`.
 
 ## API REST (v1)
 
@@ -171,7 +203,8 @@ Autenticación:
 - `GET /categories`: categorías activas de la empresa.
 - `POST /expenses/analyze`: analiza una boleta (multipart `receipt`) y devuelve campos OCR.
 - `GET /expenses`: lista gastos (paginable por `limit` y `offset`).
-- `POST /expenses`: crea gasto; acepta imagen/PDF y puede autocompletar con IA.
+- `POST /expenses`: crea gasto; acepta imagen/PDF, puede autocompletar con IA y exige `gps_latitude`/`gps_longitude`.
+  También acepta `receipt_time` (`HH:MM` o `HH:MM:SS`).
 - `GET /reports`: lista rendiciones.
 - `POST /reports`: crea rendición a partir de `expense_ids`.
 - `GET /reports/{id}`: detalle completo (gastos + decisiones).
@@ -212,8 +245,14 @@ curl -X POST http://localhost:5001/api/v1/expenses \
   -H "Authorization: Bearer <TOKEN>" \
   -F "description=Traslado cliente Santiago centro" \
   -F "date=2026-03-08" \
+  -F "receipt_time=13:25" \
+  -F "gps_latitude=-33.4489" \
+  -F "gps_longitude=-70.6693" \
+  -F "gps_accuracy_m=25.0" \
   -F "receipt=@/ruta/boleta.jpg"
 ```
+
+`date` soporta `YYYY-MM-DD`, `DD/MM/YYYY` y `DD-MM-YYYY`.
 
 4. Crear rendición:
 

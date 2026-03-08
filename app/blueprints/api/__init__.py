@@ -28,6 +28,7 @@ from app.models import (
     UserApiKey,
     UserRole,
 )
+from app.services.location_service import evaluate_expense_integrity, reverse_geocode
 from app.services.notification_service import notify_approval_needed, notify_report_approved, notify_report_rejected
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
@@ -147,6 +148,78 @@ def _parse_date(value):
         return None
 
 
+def _parse_datetime(value):
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _parse_coordinate(value, min_value, max_value):
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = Decimal(raw)
+    except InvalidOperation:
+        return None
+
+    if parsed < Decimal(str(min_value)) or parsed > Decimal(str(max_value)):
+        return None
+
+    return parsed
+
+
+def _parse_non_negative_decimal(value):
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = Decimal(raw)
+    except InvalidOperation:
+        return None
+
+    if parsed < 0:
+        return None
+
+    return parsed
+
+
+def _parse_time(value):
+    if value is None:
+        return None
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    normalized = raw.replace(".", ":")
+    for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"):
+        try:
+            return datetime.strptime(normalized, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
 def _data_dict():
     if request.is_json:
         return request.get_json(silent=True) or {}
@@ -189,6 +262,7 @@ def _serialize_expense(expense):
         "amount": _decimal_as_text(expense.amount),
         "currency": expense.currency,
         "date": expense.date.isoformat() if expense.date else None,
+        "receipt_time": expense.receipt_time.isoformat() if expense.receipt_time else None,
         "merchant": expense.merchant,
         "client_partner": expense.client_partner,
         "description": expense.description,
@@ -200,6 +274,19 @@ def _serialize_expense(expense):
         if expense.category
         else None,
         "receipt_url": expense.receipt_url,
+        "location": {
+            "latitude": _decimal_as_text(expense.gps_latitude),
+            "longitude": _decimal_as_text(expense.gps_longitude),
+            "accuracy_m": _decimal_as_text(expense.gps_accuracy_m),
+            "captured_at": expense.gps_captured_at.isoformat() if expense.gps_captured_at else None,
+            "address": expense.gps_address,
+        },
+        "geo_validation": {
+            "status": expense.gps_validation_status,
+            "score": _decimal_as_text(expense.gps_validation_score),
+            "reason": expense.gps_validation_reason,
+            "meta": expense.gps_validation_meta or {},
+        },
         "is_duplicate": bool(expense.is_duplicate),
         "duplicate_of_id": str(expense.duplicate_of_id) if expense.duplicate_of_id else None,
         "created_at": expense.created_at.isoformat() if expense.created_at else None,
@@ -631,7 +718,15 @@ def expenses_create():
     client_partner = (data.get("client_partner") or "").strip() or None
     description = (data.get("description") or "").strip()
     date_value = _parse_date(data.get("date"))
+    receipt_time = _parse_time(data.get("receipt_time"))
     category_id = _uuid_or_none(data.get("category_id"))
+    gps_latitude_raw = data.get("gps_latitude")
+    gps_longitude_raw = data.get("gps_longitude")
+    gps_accuracy_raw = data.get("gps_accuracy_m")
+    gps_address_raw = data.get("gps_address")
+    gps_address = str(gps_address_raw).strip() if gps_address_raw is not None else ""
+    gps_address = gps_address or None
+    gps_captured_at = _parse_datetime(data.get("gps_captured_at")) or datetime.now(timezone.utc)
     ocr_data = None
 
     receipt_file = request.files.get("receipt")
@@ -655,6 +750,9 @@ def expenses_create():
                 if not date_value:
                     date_value = _parse_date(ocr_data.get("date"))
 
+                if receipt_time is None:
+                    receipt_time = _parse_time(ocr_data.get("time"))
+
                 if category_id is None and ocr_data.get("category"):
                     found_category = Category.query.filter(
                         Category.company_id == user.company_id,
@@ -675,6 +773,41 @@ def expenses_create():
     if len(description) < 15:
         return _error("La descripcion debe tener al menos 15 caracteres.", status=422, code="validation_error")
 
+    if gps_latitude_raw is None or gps_longitude_raw is None:
+        return _error(
+            "Debes enviar gps_latitude y gps_longitude para crear un gasto.",
+            status=422,
+            code="validation_error",
+        )
+
+    gps_latitude = _parse_coordinate(gps_latitude_raw, -90, 90)
+    gps_longitude = _parse_coordinate(gps_longitude_raw, -180, 180)
+    gps_accuracy_m = _parse_non_negative_decimal(gps_accuracy_raw)
+
+    if gps_latitude is None or gps_longitude is None:
+        return _error(
+            "Las coordenadas GPS no son validas.",
+            status=422,
+            code="validation_error",
+        )
+
+    resolved_address = gps_address
+    if not resolved_address:
+        geocode_result = reverse_geocode(float(gps_latitude), float(gps_longitude))
+        resolved_address = geocode_result.get("display_name") if geocode_result else None
+    if not resolved_address:
+        resolved_address = f"Lat {gps_latitude}, Lon {gps_longitude}"
+
+    geo_validation = evaluate_expense_integrity(
+        merchant=merchant,
+        address=resolved_address,
+        accuracy_m=gps_accuracy_m,
+        receipt_date=date_value,
+        rendered_at=gps_captured_at,
+        receipt_time=receipt_time,
+        time_tolerance_minutes=20,
+    )
+
     if category_id is not None:
         category = Category.query.filter_by(id=category_id, company_id=user.company_id).first()
         if not category:
@@ -688,11 +821,24 @@ def expenses_create():
             merchant=merchant,
             client_partner=client_partner,
             date=date_value,
+            receipt_time=receipt_time,
             category_id=category_id,
             description=description,
             status=ExpenseStatus.DRAFT,
             receipt_url=receipt_url,
             ocr_raw_data=ocr_data,
+            gps_latitude=gps_latitude,
+            gps_longitude=gps_longitude,
+            gps_accuracy_m=gps_accuracy_m,
+            gps_captured_at=gps_captured_at,
+            gps_address=resolved_address,
+            gps_validation_status=geo_validation["status"],
+            gps_validation_score=geo_validation["score"],
+            gps_validation_reason=geo_validation["reason"],
+            gps_validation_meta={
+                "matched_tokens": geo_validation.get("matched_tokens", []),
+                "components": geo_validation.get("components", []),
+            },
         )
 
         db.session.add(expense)
@@ -700,6 +846,26 @@ def expenses_create():
 
         _append_duplicate_flags(expense)
         warnings = _policy_warnings_for_expense(expense)
+        if geo_validation["status"] == "mismatch":
+            if geo_validation.get("reason") == "receipt_date_mismatch":
+                warnings.append("La fecha de la boleta no coincide con la fecha de rendicion.")
+            elif geo_validation.get("reason") == "receipt_time_mismatch":
+                warnings.append("La hora de la boleta no coincide con la hora de rendicion (margen 20 min).")
+            elif geo_validation.get("reason") == "weekend_submission":
+                warnings.append("Gasto en fin de semana: indicador de riesgo potencial.")
+            elif geo_validation.get("reason") == "outside_business_hours":
+                warnings.append("Gasto fuera del horario habitual (L-V 09:00 a 19:00).")
+            else:
+                warnings.append("Ubicacion GPS no coincide con el comercio informado.")
+        elif geo_validation["status"] == "partial":
+            if geo_validation.get("reason") == "weekend_submission":
+                warnings.append("Gasto en fin de semana: indicador de riesgo potencial.")
+            elif geo_validation.get("reason") == "outside_business_hours":
+                warnings.append("Gasto fuera del horario habitual (L-V 09:00 a 19:00).")
+            elif geo_validation.get("reason") == "outside_business_hours_near":
+                warnings.append("Gasto levemente fuera del horario habitual (L-V 09:00 a 19:00).")
+            else:
+                warnings.append("Coincidencia parcial en validaciones de ubicacion/fecha/hora.")
 
         _audit(
             user,

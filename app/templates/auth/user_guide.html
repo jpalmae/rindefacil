@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Guía de Uso - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4 max-w-5xl mx-auto space-y-6">
+    <div class="card">
+        <h1 class="text-2xl font-bold text-gray-900">Guía de Uso Completa</h1>
+        <p class="text-gray-600 mt-2">
+            Esta guía explica cómo usar {{ brand_app_name }} de punta a punta: crear gastos, subir boletas,
+            entender validaciones antifraude, armar rendiciones y usar API Keys.
+        </p>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">1. Flujo recomendado (resumen)</h2>
+        <ol class="list-decimal pl-6 space-y-2 text-gray-700">
+            <li>Ingresa a <strong>Nuevo Gasto</strong>.</li>
+            <li>Permite acceso a GPS y verifica que quede capturada tu ubicación.</li>
+            <li>Sube foto/PDF de boleta para autocompletado con IA.</li>
+            <li>Revisa monto, comercio, fecha y hora de boleta.</li>
+            <li>Completa el motivo (mínimo 15 caracteres) y guarda.</li>
+            <li>Agrupa tus gastos en una rendición y envíala a aprobación.</li>
+        </ol>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">2. Crear un gasto correctamente</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Ruta:</strong> <code>Mis Gastos -> + Nuevo Gasto</code>.</p>
+            <p><strong>Campos obligatorios:</strong> monto, comercio, fecha, motivo y GPS activo.</p>
+            <p>
+                <strong>Hora boleta:</strong> recomendable completarla siempre. Mejora la trazabilidad y la validación
+                antifraude frente al momento real de rendición.
+            </p>
+            <p>
+                <strong>Boleta con IA:</strong> al cargar la imagen/PDF, el sistema intenta extraer monto, comercio,
+                fecha y hora automáticamente.
+            </p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">3. Cómo funciona la validación antifraude</h2>
+        <p class="text-gray-700">
+            Cada gasto obtiene una validación <strong>Coherente</strong>, <strong>Parcial</strong> o
+            <strong>Riesgo</strong>. Se calcula con:
+        </p>
+        <ul class="list-disc pl-6 space-y-2 text-gray-700">
+            <li>Coincidencia entre comercio y dirección GPS capturada.</li>
+            <li>Coincidencia entre fecha de boleta y fecha de rendición.</li>
+            <li>Coincidencia entre hora de boleta y hora de rendición (margen de 20 minutos).</li>
+            <li>Rango horario habitual: lunes a viernes entre 09:00 y 19:00.</li>
+        </ul>
+        <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
+            <p><strong>Regla especial:</strong> si el gasto cae en fin de semana o fuera de horario hábil,
+                la validación no queda en “Coherente” (baja al menos a “Parcial”).</p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">4. Crear y enviar una rendición</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Ruta:</strong> <code>Rendiciones -> Nueva Rendición</code>.</p>
+            <p>Selecciona gastos en borrador, define título/descripcion y crea la rendición.</p>
+            <p>Cuando esté lista, envíala al flujo de aprobación para revisión de jefatura/administración.</p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">5. Estados y alertas</h2>
+        <ul class="list-disc pl-6 space-y-2 text-gray-700">
+            <li><strong>Borrador:</strong> gasto creado, aún no enviado en rendición.</li>
+            <li><strong>Enviado:</strong> está dentro de una rendición en proceso de aprobación.</li>
+            <li><strong>Aprobado / Rechazado:</strong> resultado del flujo.</li>
+            <li><strong>Advertencias:</strong> pueden aparecer por duplicados, políticas o score antifraude.</li>
+        </ul>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">6. API Keys para agentes IA</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Ruta:</strong> <code>Mi Perfil -> API Keys para Agentes IA</code>.</p>
+            <p>
+                Cada usuario puede generar claves personales que heredan sus permisos para integrar
+                Telegram, WhatsApp u otros agentes.
+            </p>
+            <p>
+                En API, para crear gastos también se debe enviar ubicación GPS
+                (<code>gps_latitude</code> y <code>gps_longitude</code>).
+            </p>
+            <p><strong>Formato recomendado de fecha por API:</strong> <code>DD/MM/YYYY</code>.</p>
+        </div>
+    </div>
+
+    <div class="card space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">7. Buenas prácticas para evitar rechazos</h2>
+        <ul class="list-disc pl-6 space-y-2 text-gray-700">
+            <li>Rinde apenas ocurre el gasto (mejor score y mejor trazabilidad).</li>
+            <li>No edites manualmente comercio/fecha/hora si la boleta ya fue leída correctamente.</li>
+            <li>Sube imágenes nítidas, completas y sin cortes.</li>
+            <li>Describe claramente el motivo y su contexto de negocio.</li>
+        </ul>
+    </div>
+
+    <div class="flex justify-end">
+        <a href="{{ url_for('auth.profile') }}" class="btn-outline">Volver a Mi Perfil</a>
+    </div>
+</div>
+{% endblock %}

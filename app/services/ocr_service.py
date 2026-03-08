@@ -71,7 +71,8 @@ def extract_expense_data(image_path):
         Devuelve ÚNICAMENTE un objeto JSON válido con las siguientes claves:
         - "amount": Número con el total pagado (sin símbolos ni separador de miles). Usa punto SOLO si hay decimales. Ej: 2500 o 2500.75
         - "merchant": Nombre comercial del proveedor o comercio (si no hay, devuelve null).
-        - "date": Fecha del gasto en formato YYYY-MM-DD (si no hay, devuelve null).
+        - "date": Fecha del gasto en formato DD/MM/YYYY (si no hay, devuelve null).
+        - "time": Hora del comprobante en formato HH:MM (24h). Si no está visible, devuelve null.
         - "category": Clasifica el gasto en una de las siguientes opciones: "Viajes", "Alimentación", "Hospedaje", "Suministros", u "Otros".
         """
 
