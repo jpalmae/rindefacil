@@ -10,6 +10,7 @@ from werkzeug.utils import secure_filename
 admin_bp = Blueprint('admin', __name__)
 
 ALLOWED_LOGO_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp', '.svg'}
+ALLOWED_ICON_EXTENSIONS = {'.ico', '.png', '.jpg', '.jpeg', '.webp', '.svg'}
 
 
 def _sanitize_domain(value):
@@ -310,6 +311,8 @@ def branding():
 
         if request.form.get('remove_logo') == '1':
             settings.pop('brand_logo_url', None)
+        if request.form.get('remove_icon') == '1':
+            settings.pop('brand_icon_url', None)
 
         if 'logo' in request.files:
             logo = request.files['logo']
@@ -326,6 +329,22 @@ def branding():
                 file_path = os.path.join(branding_dir, filename)
                 logo.save(file_path)
                 settings['brand_logo_url'] = f"/static/uploads/branding/{filename}"
+
+        if 'icon' in request.files:
+            icon = request.files['icon']
+            if icon and icon.filename:
+                ext = os.path.splitext(icon.filename)[1].lower()
+                if ext not in ALLOWED_ICON_EXTENSIONS:
+                    flash('Formato de ícono no permitido. Usa ICO, PNG, JPG, WEBP o SVG.', 'danger')
+                    return redirect(url_for('admin.branding'))
+
+                branding_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'branding')
+                os.makedirs(branding_dir, exist_ok=True)
+                safe_name = secure_filename(icon.filename)
+                filename = f"icon_{company.id}_{int(time.time())}_{safe_name}"
+                file_path = os.path.join(branding_dir, filename)
+                icon.save(file_path)
+                settings['brand_icon_url'] = f"/static/uploads/branding/{filename}"
 
         company.settings = settings
         db.session.commit()

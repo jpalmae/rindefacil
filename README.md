@@ -16,7 +16,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
-- Branding por empresa: nombre de app, logo y dominio por defecto para emails de usuarios.
+- Branding por empresa: nombre de app, ícono, logo y dominio por defecto para emails de usuarios.
 - Selector de temas visuales (Executive / Paper / Midnight).
 - Guía funcional de uso integrada para usuarios desde `Mi Perfil`.
 
@@ -129,6 +129,7 @@ Ruta: `Admin -> Branding` (`/admin/branding`).
 Permite configurar:
 
 - Nombre visible de la app (`brand_app_name`).
+- Ícono de la app (`brand_icon_url`) para pestaña/navegación.
 - Logo corporativo (PNG/JPG/WEBP/SVG).
 - Dominio de correo por defecto para creación de usuarios (`brand_user_default_domain`).
 
@@ -196,7 +197,7 @@ Módulos principales:
 - `Usuarios`: crear/editar/eliminar, rol, manager, centro de costo.
 - `Centros de costo`: código y presupuesto mensual.
 - `Flujos`: diseño de pipeline de aprobación.
-- `Branding`: nombre app, logo y dominio por defecto de usuarios.
+- `Branding`: nombre app, ícono, logo y dominio por defecto de usuarios.
 - `Auditoría`: historial de acciones.
 
 ## OCR y comportamiento de gastos
