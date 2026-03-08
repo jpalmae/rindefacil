@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <a href="{{ url_for('admin.index') }}" class="text-gray-400 hover:text-primary transition-colors">
+                    <span class="i-heroicons-arrow-left text-xl block"></span>
+                </a>
+                <h1 class="text-2xl font-black text-gray-900 leading-tight">Gestión de Usuarios</h1>
+            </div>
+            <p class="text-gray-500 ml-8 text-sm">Controla los accesos y roles de tu equipo.</p>
+        </div>
+
+        <a href="{{ url_for('admin.user_new') }}" class="btn-primary flex items-center gap-2 ml-8 md:ml-0">
+            <span class="i-heroicons-user-plus"></span> Invitar Usuario
+        </a>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-100">
+                <thead class="bg-gray-50/50">
+                    <tr>
+                        <th
+                            class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
+                            Usuario</th>
+                        <th
+                            class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
+                            Rol</th>
+                        <th
+                            class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
+                            Reporta a</th>
+                        <th
+                            class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
+                            Estado</th>
+                        <th
+                            class="px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">
+                            Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for u in users %}
+                    <tr class="hover:bg-gray-50/50 transition-colors group">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="h-10 w-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-500 flex items-center justify-center font-bold text-sm ring-2 ring-white">
+                                    {{ u.full_name[:1] }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">{{ u.full_name }}</div>
+                                    <div class="text-xs text-gray-500 font-medium">{{ u.email }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if u.role == 'admin' %}
+                            <span
+                                class="badge border border-blue-200 bg-blue-50 text-blue-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Admin</span>
+                            {% elif u.role == 'manager' %}
+                            <span
+                                class="badge border border-indigo-200 bg-indigo-50 text-indigo-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Manager</span>
+                            {% else %}
+                            <span
+                                class="badge border border-gray-200 bg-gray-50 text-gray-600 uppercase tracking-tighter text-[9px] px-2 py-0.5">Empleado</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if u.manager %}
+                            <div class="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+                                <span class="i-heroicons-user text-gray-400"></span> {{ u.manager.full_name }}
+                            </div>
+                            {% else %}
+                            <span class="text-[10px] text-gray-400 italic">No asignado</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span
+                                class="flex items-center gap-1.5 text-[10px] font-bold text-success uppercase tracking-widest">
+                                <span class="w-2 h-2 rounded-full bg-success"></span> Activo
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                            <div class="flex justify-end gap-2">
+                                <a href="{{ url_for('admin.user_edit', user_id=u.id) }}"
+                                    class="p-2 text-gray-400 hover:text-primary transition-colors inline-block">
+                                    <span class="i-heroicons-pencil-square text-lg"></span>
+                                </a>
+                                {% if u.id != current_user.id %}
+                                <form action="{{ url_for('admin.user_delete', user_id=u.id) }}" method="POST"
+                                    onsubmit="return confirm('¿Seguro que quieres eliminar este usuario?');"
+                                    class="inline">
+                                    <button type="submit" class="p-2 text-gray-400 hover:text-danger transition-colors">
+                                        <span class="i-heroicons-trash text-lg"></span>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

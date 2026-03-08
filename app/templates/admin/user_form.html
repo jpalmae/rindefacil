@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if user else 'Nuevo' }} Usuario - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 flex items-center gap-3">
+        <a href="{{ url_for('admin.users') }}" class="text-gray-400 hover:text-primary transition-colors">
+            <span class="i-heroicons-arrow-left text-xl block"></span>
+        </a>
+        <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ 'Editar' if user else 'Nuevo' }} Usuario</h1>
+    </div>
+
+    <div class="card p-8 bg-white border border-gray-100 shadow-sm rounded-2xl">
+        <form method="POST" class="space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Nombre
+                        Completo</label>
+                    <input type="text" name="full_name" value="{{ user.full_name if user else '' }}" required
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                        placeholder="Ej: Juan Pérez">
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Email</label>
+                    <input type="text" name="email" value="{{ user.email if user else '' }}" required
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                        placeholder="{{ 'usuario@' ~ user_default_domain if user_default_domain else 'juan@empresa.com' }}">
+                    {% if user_default_domain %}
+                    <p class="text-[10px] text-gray-400 italic">Si escribes solo el alias, se agrega @{{ user_default_domain }} automáticamente.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Rol del
+                        Sistema</label>
+                    <select name="role"
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl">
+                        <option value="employee" {% if user and user.role=='employee' %}selected{% endif %}>Empleado
+                        </option>
+                        <option value="manager" {% if user and user.role=='manager' %}selected{% endif %}>Gerente /
+                            Manager</option>
+                        <option value="admin" {% if user and user.role=='admin' %}selected{% endif %}>Administrador
+                        </option>
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Reporta a
+                        (Manager)</label>
+                    <select name="manager_id"
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl">
+                        <option value="">Ninguno</option>
+                        {% for manager in all_users %}
+                        {% if not user or manager.id != user.id %}
+                        <option value="{{ manager.id }}" {% if user and user.manager_id==manager.id %}selected{% endif
+                            %}>
+                            {{ manager.full_name }}
+                        </option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Centro de
+                        Costo</label>
+                    <select name="cost_center_id"
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl">
+                        <option value="">Sin Asignar</option>
+                        {% for cc in cost_centers %}
+                        <option value="{{ cc.id }}" {% if user and user.cost_center_id==cc.id %}selected{% endif %}>
+                            {{ cc.name }} ({{ cc.code }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Contraseña {% if user
+                        %}(Opcional){% endif %}</label>
+                    <input type="password" name="password" {% if not user %}required{% endif %}
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                        placeholder="••••••••">
+                    {% if user %}
+                    <p class="text-[10px] text-gray-400 italic">Deja en blanco para no cambiarla.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-gray-100 flex justify-end gap-3">
+                <a href="{{ url_for('admin.users') }}" class="btn-outline">Cancelar</a>
+                <button type="submit" class="btn-primary">
+                    {{ 'Guardar Cambios' if user else 'Crear Usuario' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

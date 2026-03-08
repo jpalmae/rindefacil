@@ -1,0 +1,15 @@
+{
+    "name": "sixmanager-gastos",
+    "version": "1.0.0",
+    "description": "SixRinde",
+    "scripts": {
+        "css-build": "unocss \"app/templates/**/*.html\" \"app/static/js/**/*.js\" --out-file app/static/css/uno.css",
+        "css-watch": "unocss \"app/templates/**/*.html\" \"app/static/js/**/*.js\" --out-file app/static/css/uno.css --watch"
+    },
+    "devDependencies": {
+        "unocss": "^0.65.4",
+        "@unocss/preset-uno": "^0.65.4",
+        "@unocss/preset-icons": "^0.65.4",
+        "@iconify-json/heroicons": "^1.2.2"
+    }
+}

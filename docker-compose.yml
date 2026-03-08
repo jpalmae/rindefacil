@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sixmanager_gastos
+      POSTGRES_USER: sixmanager
+      POSTGRES_PASSWORD: sixmanager
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    environment:
+      - FLASK_APP=run_dev.py
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql+psycopg://sixmanager:sixmanager@db:5432/sixmanager_gastos
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_MODEL_OCR=${OPENROUTER_MODEL_OCR}
+      - OPENROUTER_MODEL_FALLBACK=${OPENROUTER_MODEL_FALLBACK}
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./migrations:/app/migrations
+    depends_on:
+      - db
+
+volumes:
+  pgdata:

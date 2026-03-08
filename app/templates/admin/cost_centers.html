@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Centros de Costo - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <a href="{{ url_for('admin.index') }}" class="text-gray-400 hover:text-primary transition-colors">
+                    <span class="i-heroicons-arrow-left text-xl block"></span>
+                </a>
+                <h1 class="text-2xl font-black text-gray-900 leading-tight">Centros de Costo</h1>
+            </div>
+            <p class="text-gray-500 ml-8 text-sm">Define la estructura organizacional para el reporte de gastos.</p>
+        </div>
+
+        <a href="{{ url_for('admin.cost_center_new') }}" class="btn-primary flex items-center gap-2 ml-8 md:ml-0">
+            <span class="i-heroicons-plus-circle"></span> Nuevo Centro de Costo
+        </a>
+    </div>
+
+    <!-- Cost Centers List -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <ul class="divide-y divide-gray-100">
+            {% for c in cost_centers %}
+            <li class="p-6 hover:bg-gray-50 transition-colors">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-4">
+                        <div
+                            class="w-12 h-12 rounded-xl bg-stone-50 text-stone-600 flex items-center justify-center border border-stone-100">
+                            <span class="i-heroicons-building-office text-xl"></span>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-bold text-gray-900 leading-tight">{{ c.name }}</h4>
+                            <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Código: {{ c.code
+                                }}</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-6">
+                        <div class="text-right hidden sm:block w-32">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none">Prespuesto
+                            </p>
+                            <p class="text-lg font-black text-gray-900 mt-1">${{ "{:,.0f}".format(c.monthly_budget or 0)
+                                }}</p>
+                        </div>
+                        <div class="text-right hidden sm:block">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none">Miembros
+                            </p>
+                            <p class="text-lg font-black text-gray-900 mt-1">{{ c.users|length }}</p>
+                        </div>
+                        <div class="flex gap-1">
+                            <a href="{{ url_for('admin.cost_center_edit', id=c.id) }}"
+                                class="p-2 text-gray-400 hover:text-primary transition-colors inline-block">
+                                <span class="i-heroicons-pencil-square text-lg"></span>
+                            </a>
+                            <form action="{{ url_for('admin.cost_center_delete', id=c.id) }}" method="POST"
+                                onsubmit="return confirm('¿Eliminar centro de costo?');" class="inline">
+                                <button type="submit" class="p-2 text-gray-400 hover:text-danger transition-colors">
+                                    <span class="i-heroicons-trash text-lg"></span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+
+            {% if not cost_centers %}
+            <li class="py-20 text-center">
+                <span class="i-heroicons-building-office text-5xl text-gray-200 block mx-auto mb-4"></span>
+                <p class="text-gray-400 font-medium">No se han definido centros de costo aún.</p>
+            </li>
+            {% endif %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

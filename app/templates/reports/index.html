@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Informes de Rendición - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Mis Informes</h1>
+            <p class="text-gray-500">Agrupa tus gastos y envíalos a aprobación</p>
+        </div>
+        <a href="{{ url_for('reports.new') }}" class="btn-primary">
+            + Nuevo Informe
+        </a>
+    </div>
+
+    <div class="mt-4">
+        {% if reports %}
+        <!-- Desktop view -->
+        <div class="hidden sm:block card overflow-hidden p-0">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-100">
+                    <thead class="bg-gray-50/50">
+                        <tr>
+                            <th
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Creado</th>
+                            <th
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Título</th>
+                            <th
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Usuario</th>
+                            <th
+                                class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Total</th>
+                            <th
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Estado</th>
+                            <th
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-50">
+                        {% for report in reports %}
+                        <tr class="hover:bg-gray-50/50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{
+                                report.created_at.strftime('%d/%m/%Y') }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ report.title }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ report.user.full_name }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
+                                ${{ "{:,.0f}".format(report.total_amount) }}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                {% if report.status == 'draft' %}
+                                <span class="badge-yellow">Borrador</span>
+                                {% elif report.status == 'submitted' %}
+                                <span class="badge bg-blue-100 text-blue-800">Enviado</span>
+                                {% elif report.status == 'approved' %}
+                                <span class="badge-green">Aprobado</span>
+                                {% else %}
+                                <span class="badge-red">{{ report.status | capitalize }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <a href="{{ url_for('reports.show', id=report.id) }}"
+                                    class="text-primary hover:text-primary-dark font-medium text-sm">Ver ></a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Mobile Cards -->
+        <div class="sm:hidden space-y-3">
+            {% for report in reports %}
+            <a href="{{ url_for('reports.show', id=report.id) }}"
+                class="block card-compact relative overflow-hidden group">
+                <div class="flex justify-between items-start mb-2">
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                            <div class="text-xs font-medium text-gray-400">{{ report.created_at.strftime('%d %b, %Y') }}
+                            </div>
+                            {% if report.status == 'draft' %}
+                            <span class="badge-yellow !text-[10px] !px-2 !py-0.5">Borrador</span>
+                            {% elif report.status == 'approved' %}
+                            <span class="badge-green !text-[10px] !px-2 !py-0.5">Aprobado</span>
+                            {% elif report.status == 'rejected' %}
+                            <span class="badge-red !text-[10px] !px-2 !py-0.5">Rechazado</span>
+                            {% else %}
+                            <span class="badge bg-blue-100 text-blue-800 !text-[10px] !px-2 !py-0.5">{{ report.status
+                                }}</span>
+                            {% endif %}
+                        </div>
+                        <h3 class="text-base font-bold text-gray-900 leading-tight">{{ report.title }}</h3>
+                        <div class="text-sm font-medium text-gray-500 mt-0.5">{{ report.user.full_name }}</div>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-end mt-4">
+                    <div class="text-gray-500 text-sm font-medium">
+                        {{ expense_counts.get(report.id, 0) }} Gastos
+                    </div>
+                    <div class="text-xl font-black text-primary tracking-tight">
+                        ${{ "{:,.0f}".format(report.total_amount) }}
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <span class="i-heroicons-document-duplicate text-gray-300 text-6xl mb-4 block"></span>
+            <p class="text-gray-500 mb-4">No has agrupado gastos en ningún informe aún.</p>
+            <a href="{{ url_for('reports.new') }}" class="btn-outline">Agrupar gastos</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

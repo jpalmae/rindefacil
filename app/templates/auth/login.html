@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Iniciar Sesión - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md">
+        <div class="card shadow-sm rounded-2xl p-8">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Iniciar Sesión</h2>
+                <p class="text-gray-500">Introduce tus credenciales para acceder</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('auth.login') }}" class="space-y-4">
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Correo
+                        Electrónico</label>
+                    <input type="email" class="input w-full" id="email" name="email" required autofocus>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                    <input type="password" class="input w-full" id="password" name="password" required>
+                </div>
+
+                <div class="flex items-center justify-between mt-4">
+                    <div class="flex items-center">
+                        <input type="checkbox" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded"
+                            id="remember" name="remember">
+                        <label class="ml-2 block text-sm text-gray-900" for="remember">Recordarme</label>
+                    </div>
+                </div>
+
+                <div class="pt-4">
+                    <button type="submit" class="btn-primary w-full py-2.5">Entrar</button>
+                </div>
+            </form>
+
+            <div class="mt-8 text-center text-sm text-gray-600">
+                <p>¿No tienes cuenta? <a href="{{ url_for('auth.register') }}"
+                        class="text-primary hover:text-primary-dark font-semibold">Regístrate</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

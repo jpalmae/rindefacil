@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="executive">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{{ brand_app_name }}{% endblock %}</title>
+    <!-- UnoCSS generated file -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/uno.css', v=(css_version|default(1, true))) }}">
+    <!-- PWA -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon-192.png') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --font-body: "Manrope", "Segoe UI", sans-serif;
+            --font-display: "Sora", "Avenir Next", sans-serif;
+        }
+
+        [x-cloak] {
+            display: none !important;
+        }
+
+        [data-theme="executive"] {
+            --bg-base: #eef2f7;
+            --bg-soft: #f8fafc;
+            --surface-1: #ffffff;
+            --text-1: #0f172a;
+            --text-2: #334155;
+            --text-muted: #64748b;
+            --line: #d8e1ed;
+            --primary: #0f766e;
+            --primary-700: #115e59;
+            --primary-soft: #ccfbf1;
+            --ring: rgba(15, 118, 110, 0.35);
+            --card-shadow: 0 18px 32px -24px rgba(15, 23, 42, 0.28);
+            --card-shadow-hover: 0 24px 42px -26px rgba(15, 23, 42, 0.36);
+            --nav-bg: rgba(255, 255, 255, 0.84);
+            --floating-bg: rgba(255, 255, 255, 0.92);
+        }
+
+        [data-theme="paper"] {
+            --bg-base: #f4efe4;
+            --bg-soft: #fbf7ef;
+            --surface-1: #fffdf7;
+            --text-1: #3f2c1f;
+            --text-2: #5f4a39;
+            --text-muted: #866f58;
+            --line: #e7ddce;
+            --primary: #9a5d21;
+            --primary-700: #7c4212;
+            --primary-soft: #fef3c7;
+            --ring: rgba(154, 93, 33, 0.35);
+            --card-shadow: 0 18px 30px -24px rgba(84, 50, 25, 0.3);
+            --card-shadow-hover: 0 24px 40px -24px rgba(84, 50, 25, 0.36);
+            --nav-bg: rgba(255, 253, 247, 0.9);
+            --floating-bg: rgba(255, 253, 247, 0.95);
+        }
+
+        [data-theme="midnight"] {
+            --bg-base: #070b14;
+            --bg-soft: #0a1222;
+            --surface-1: #101a2e;
+            --text-1: #e5edf9;
+            --text-2: #c6d5eb;
+            --text-muted: #8ea6c8;
+            --line: #273754;
+            --primary: #22d3ee;
+            --primary-700: #0ea5b8;
+            --primary-soft: #12354d;
+            --ring: rgba(34, 211, 238, 0.35);
+            --card-shadow: 0 22px 36px -26px rgba(2, 8, 23, 0.85);
+            --card-shadow-hover: 0 30px 44px -24px rgba(2, 8, 23, 0.95);
+            --nav-bg: rgba(10, 18, 34, 0.86);
+            --floating-bg: rgba(16, 26, 46, 0.92);
+        }
+
+        html,
+        body {
+            min-height: 100%;
+        }
+
+        body {
+            font-family: var(--font-body) !important;
+            color: var(--text-1) !important;
+            background:
+                radial-gradient(1200px 500px at 0% -10%, var(--primary-soft), transparent 58%),
+                radial-gradient(950px 520px at 120% 120%, rgba(148, 163, 184, 0.16), transparent 62%),
+                var(--bg-base) !important;
+        }
+
+        h1,
+        h2,
+        h3,
+        .font-black,
+        .font-bold {
+            font-family: var(--font-display);
+        }
+
+        .bg-gray-50,
+        .bg-gray-50\/50 {
+            background-color: var(--bg-soft) !important;
+        }
+
+        .bg-white,
+        .bg-white\/90,
+        .bg-surface {
+            background-color: var(--surface-1) !important;
+        }
+
+        .text-gray-900 {
+            color: var(--text-1) !important;
+        }
+
+        .text-gray-700,
+        .text-gray-600,
+        .text-gray-500 {
+            color: var(--text-2) !important;
+        }
+
+        .text-gray-400,
+        .text-gray-300 {
+            color: var(--text-muted) !important;
+        }
+
+        .border-gray-50,
+        .border-gray-100,
+        .border-gray-200,
+        .divide-gray-50,
+        .divide-gray-100 {
+            border-color: var(--line) !important;
+        }
+
+        .card,
+        .card-compact {
+            background-color: var(--surface-1) !important;
+            border-color: var(--line) !important;
+            box-shadow: var(--card-shadow) !important;
+        }
+
+        .card:hover {
+            box-shadow: var(--card-shadow-hover) !important;
+        }
+
+        .btn-primary {
+            background-color: var(--primary) !important;
+            color: #fff !important;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-700) !important;
+        }
+
+        .btn-outline {
+            border-color: var(--primary) !important;
+            color: var(--primary) !important;
+        }
+
+        .btn-outline:hover {
+            background-color: var(--primary-soft) !important;
+        }
+
+        .input {
+            background-color: var(--bg-soft) !important;
+            border-color: var(--line) !important;
+            color: var(--text-1) !important;
+        }
+
+        .input:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 2px var(--ring) !important;
+        }
+
+        input::placeholder,
+        textarea::placeholder {
+            color: var(--text-muted) !important;
+        }
+
+        .bg-primary {
+            background-color: var(--primary) !important;
+        }
+
+        .bg-primary-light {
+            background-color: var(--primary-soft) !important;
+        }
+
+        .text-primary,
+        .text-primary-dark,
+        .nav-item-active,
+        .hover\:text-primary:hover,
+        .hover\:text-primary-dark:hover {
+            color: var(--primary) !important;
+        }
+
+        .hover\:bg-primary-dark:hover,
+        .hover\:bg-primary:hover {
+            background-color: var(--primary-700) !important;
+        }
+
+        .border-primary,
+        .group:hover .group-hover\:border-primary {
+            border-color: var(--primary) !important;
+        }
+
+        .nav-item:hover {
+            color: var(--primary) !important;
+        }
+
+        nav.bg-white {
+            background-color: var(--nav-bg) !important;
+            border-color: var(--line) !important;
+            backdrop-filter: blur(12px);
+        }
+
+        .theme-picker {
+            background: var(--floating-bg);
+            border: 1px solid var(--line);
+            box-shadow: var(--card-shadow);
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 text-gray-900 font-sans antialiased"
+    x-data="{
+        theme: 'executive',
+        sidebarOpen: false,
+        userMenuOpen: false,
+        receiptViewerOpen: false,
+        receiptViewerUrl: '',
+        receiptViewerIsPdf: false,
+        initTheme() {
+            try {
+                const saved = localStorage.getItem('sixrinde-theme');
+                this.applyTheme(saved || 'executive', false);
+            } catch (_) {
+                this.applyTheme('executive', false);
+            }
+        },
+        applyTheme(nextTheme, persist = true) {
+            const allowed = ['executive', 'paper', 'midnight'];
+            const resolved = allowed.includes(nextTheme) ? nextTheme : 'executive';
+            this.theme = resolved;
+            document.documentElement.setAttribute('data-theme', resolved);
+            const colors = {
+                executive: '#0f766e',
+                paper: '#9a5d21',
+                midnight: '#0a1222',
+            };
+            const themeMeta = document.querySelector('meta[name=theme-color]');
+            if (themeMeta && colors[resolved]) {
+                themeMeta.setAttribute('content', colors[resolved]);
+            }
+            if (persist) {
+                try {
+                    localStorage.setItem('sixrinde-theme', resolved);
+                } catch (_) {}
+            }
+        },
+        openReceiptViewer(url) {
+            if (!url) return;
+            this.receiptViewerUrl = url;
+            this.receiptViewerIsPdf = /\\.pdf($|\\?)/i.test(url);
+            this.receiptViewerOpen = true;
+            document.body.classList.add('overflow-hidden');
+        },
+        closeReceiptViewer() {
+            this.receiptViewerOpen = false;
+            this.receiptViewerUrl = '';
+            this.receiptViewerIsPdf = false;
+            document.body.classList.remove('overflow-hidden');
+        }
+    }" x-init="initTheme()" @keydown.escape.window="closeReceiptViewer()">
+    {% set endpoint = request.endpoint or '' %}
+    {% set css_version = css_version | default(1, true) %}
+    {% set unread_count = unread_count | default(0, true) %}
+    {% set last_notifications = last_notifications | default([], true) %}
+
+    <!-- Flash messages -->
+    <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        {% for category, message in messages %}
+        <div class="px-4 py-3 rounded-lg shadow-sm border 
+                        {% if category == 'success' %}bg-success-light border-success text-success-dark
+                        {% elif category == 'danger' %}bg-danger-light border-danger text-danger-dark
+                        {% elif category == 'warning' %}bg-warning-light border-warning text-warning-dark
+                        {% else %}bg-primary-light border-primary text-primary-dark{% endif %}" x-data="{ show: true }"
+            x-show="show" x-init="setTimeout(() => show = false, 5000)">
+            <div class="flex items-center justify-between">
+                <p class="font-medium text-sm">{{ message }}</p>
+                <button @click="show = false" class="ml-4 text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+        </div>
+        {% endfor %}
+        {% endif %}
+        {% endwith %}
+    </div>
+
+    {% if current_user.is_authenticated %}
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-gray-200 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <!-- Logo & Nav -->
+                <div class="flex">
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        {% if brand_logo_url %}
+                        <img src="{{ brand_logo_url }}" alt="Logo {{ brand_app_name }}"
+                            class="h-8 max-w-[120px] object-contain rounded-md">
+                        {% endif %}
+                        <span class="text-xl font-bold text-primary">{{ brand_app_name }}</span>
+                    </div>
+                    <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                        <a href="{{ url_for('dashboard.index') }}"
+                            class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Dashboard</a>
+                        <a href="{{ url_for('expenses.index') }}"
+                            class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Gastos</a>
+                        <a href="{{ url_for('reports.index') }}"
+                            class="{{ 'border-primary text-gray-900' if 'reports' in endpoint else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Informes</a>
+                        {% if current_user.is_admin %}
+                        <a href="{{ url_for('admin.index') }}"
+                            class="{{ 'border-primary text-gray-900' if 'admin' in endpoint else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Panel
+                            Admin</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Right side -->
+                <div class="flex items-center">
+                    <!-- Notifications Bell -->
+                    <div class="ml-3 relative" x-data="{ notifOpen: false }">
+                        <button @click="notifOpen = !notifOpen"
+                            class="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary relative">
+                            <span class="sr-only">Ver notificaciones</span>
+                            <span class="i-heroicons-bell text-2xl"></span>
+                            {% if unread_count > 0 %}
+                            <span
+                                class="absolute top-1 right-1 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
+                            {% endif %}
+                        </button>
+
+                        <div x-show="notifOpen" @click.outside="notifOpen = false"
+                            class="origin-top-right absolute right-0 mt-2 w-80 rounded-xl shadow-2xl bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-50 overflow-hidden"
+                            x-cloak x-transition>
+                            <div
+                                class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
+                                <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest">Notificaciones
+                                </h3>
+                                {% if unread_count > 0 %}
+                                <span
+                                    class="bg-primary-light text-primary text-[10px] px-2 py-0.5 rounded-full font-bold">{{
+                                    unread_count }} nuevas</span>
+                                {% endif %}
+                            </div>
+                            <div class="max-h-96 overflow-y-auto">
+                                {% if not last_notifications %}
+                                <div class="p-8 text-center">
+                                    <span
+                                        class="i-heroicons-bell-slash text-4xl text-gray-200 block mx-auto mb-2"></span>
+                                    <p class="text-sm text-gray-400">Todo al día por aquí</p>
+                                </div>
+                                {% else %}
+                                {% for n in last_notifications %}
+                                <a href="{{ n.link or '#' }}"
+                                    class="block px-4 py-4 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
+                                    <div class="flex gap-3">
+                                        <div
+                                            class="flex-shrink-0 w-8 h-8 rounded-full {{ 'bg-blue-100 text-blue-600' if 'approval' in n.type else 'bg-green-100 text-green-600' }} flex items-center justify-center">
+                                            <span
+                                                class="{{ 'i-heroicons-hand-thumb-up' if 'approved' in n.type else ('i-heroicons-document-text' if 'pending' in n.type else 'i-heroicons-information-circle') }} text-sm"></span>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <p class="text-sm font-bold text-gray-900 truncate">{{ n.title }}</p>
+                                            <p class="text-xs text-gray-500 line-clamp-2 mt-0.5 leading-relaxed">{{
+                                                n.message }}</p>
+                                            <p class="text-[10px] text-gray-400 mt-2">{{ n.created_at.strftime('%d/%m/%Y
+                                                %H:%M') }}</p>
+                                        </div>
+                                        {% if not n.is_read %}
+                                        <div class="flex-shrink-0 w-2 h-2 rounded-full bg-primary self-center"></div>
+                                        {% endif %}
+                                    </div>
+                                </a>
+                                {% endfor %}
+                                {% endif %}
+                            </div>
+                            <a href="#"
+                                class="block py-2 text-center text-xs font-bold text-primary bg-gray-50 border-t border-gray-100 hover:bg-gray-100">Ver
+                                todas</a>
+                        </div>
+                    </div>
+
+                    <div class="ml-3">
+                        <div class="theme-picker rounded-xl px-2 py-1.5">
+                            <label for="theme-select" class="sr-only">Tema Visual</label>
+                            <select id="theme-select" x-model="theme" @change="applyTheme(theme)"
+                                class="text-xs"
+                                style="min-width:98px; border:1px solid var(--line); border-radius:8px; background:var(--surface-1); color:var(--text-1); padding:5px 8px; outline:none;">
+                                <option value="executive">Executive</option>
+                                <option value="paper">Paper</option>
+                                <option value="midnight">Midnight</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="ml-3 relative" x-data="{ userMenuOpen: false }">
+                        <div>
+                            <button @click="userMenuOpen = !userMenuOpen" type="button"
+                                class="bg-white rounded-full flex text-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+                                id="user-menu-button">
+                                <span class="sr-only">Open user menu</span>
+                                <div
+                                    class="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center font-bold">
+                                    {{ current_user.full_name[:1] }}
+                                </div>
+                            </button>
+                        </div>
+                        <div x-show="userMenuOpen" @click.outside="userMenuOpen = false"
+                            class="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 focus:outline-none"
+                            x-cloak>
+                            <div class="px-4 py-2 border-b border-gray-100">
+                                <p class="text-sm font-medium text-gray-900 truncate">{{ current_user.full_name }}</p>
+                                <p class="text-xs text-gray-500 truncate">{{ current_user.email }}</p>
+                            </div>
+                            <a href="{{ url_for('auth.profile') }}"
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mi Perfil</a>
+                            <a href="{{ url_for('auth.logout') }}"
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cerrar sesión</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+
+    <!-- Main content -->
+    <main class="max-w-7xl mx-auto py-6 pb-20 sm:pb-6 sm:px-6 lg:px-8">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Global Receipt Viewer -->
+    <div x-show="receiptViewerOpen" x-cloak @click.self="closeReceiptViewer()"
+        class="fixed inset-0 z-[60] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+        <div class="relative w-full max-w-5xl h-[85vh] bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <button type="button" @click="closeReceiptViewer()"
+                class="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/60 text-white hover:bg-black/75 flex items-center justify-center"
+                aria-label="Cerrar">
+                <span class="i-heroicons-x-mark text-lg"></span>
+            </button>
+
+            <template x-if="receiptViewerIsPdf">
+                <iframe :src="receiptViewerUrl" class="w-full h-full border-0" title="Comprobante PDF"></iframe>
+            </template>
+
+            <template x-if="!receiptViewerIsPdf">
+                <div class="w-full h-full bg-gray-900/95 p-2 sm:p-4 flex items-center justify-center">
+                    <img :src="receiptViewerUrl" class="max-w-full max-h-full object-contain rounded-lg"
+                        alt="Comprobante" />
+                </div>
+            </template>
+        </div>
+    </div>
+
+    {% if current_user.is_authenticated %}
+    <!-- Bottom Navigation Bar (Mobile only) -->
+    <div class="sm:hidden fixed bottom-0 w-full bg-white/90 backdrop-blur-md border-t border-gray-200 shadow-nav z-50">
+        <div class="grid grid-cols-4 h-16">
+            <a href="{{ url_for('dashboard.index') }}"
+                class="{{ 'nav-item-active' if endpoint == 'dashboard.index' else 'nav-item' }}">
+                <span class="i-heroicons-home text-2xl mb-1"></span>
+                <span class="text-[10px] font-medium">Inicio</span>
+            </a>
+            <a href="{{ url_for('expenses.index') }}"
+                class="{{ 'nav-item-active' if endpoint == 'expenses.index' else 'nav-item' }}">
+                <span class="i-heroicons-receipt-receipt text-2xl mb-1"></span>
+                <span class="text-[10px] font-medium">Gastos</span>
+            </a>
+            <div class="flex justify-center items-center relative -top-5">
+                <a href="{{ url_for('expenses.new') }}"
+                    class="flex items-center justify-center w-14 h-14 bg-primary text-white rounded-full shadow-premium hover:bg-primary-dark transition-transform active:scale-95">
+                    <span class="i-heroicons-plus text-2xl"></span>
+                </a>
+            </div>
+            <a href="{{ url_for('reports.index') }}"
+                class="{{ 'nav-item-active' if endpoint == 'reports.index' else 'nav-item' }}">
+                <span class="i-heroicons-document-duplicate text-2xl mb-1"></span>
+                <span class="text-[10px] font-medium">Informes</span>
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <!-- Service Worker cleanup to avoid stale cached UI during active development -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (const registration of registrations) {
+                        await registration.unregister();
+                    }
+
+                    if ('caches' in window) {
+                        const cacheKeys = await caches.keys();
+                        await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+                    }
+                } catch (err) {
+                    console.log('Service Worker cleanup failed', err);
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>

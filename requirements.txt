@@ -1,0 +1,39 @@
+# Core
+Flask==3.1.0
+Flask-Login==0.6.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.7
+Flask-Mail==0.10.0
+Flask-CORS==4.0.1
+Flask-Limiter==3.9.0
+
+# Database
+SQLAlchemy==2.0.36
+psycopg[binary]
+alembic==1.14.0
+
+# Auth
+PyJWT==2.10.0
+bcrypt==4.2.1
+authlib==1.4.0   # OAuth2
+
+# Storage
+minio==7.2.12
+Pillow==11.0.0
+
+# AI / OCR
+openai==1.58.0   # compatible con OpenRouter
+
+# Export
+openpyxl==3.1.5
+WeasyPrint==65.0
+reportlab==4.3.0
+
+# Utils
+python-dotenv==1.0.1
+marshmallow==3.23.1  # serialización
+click==8.1.8
+gunicorn==23.0.0
+gevent==24.11.1
+imagehash==4.3.2     # pHash para detección duplicados
+requests==2.32.3

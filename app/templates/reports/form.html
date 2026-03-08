@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Informe - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4 max-w-4xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Agrupar Gastos en Informe</h1>
+        <p class="text-gray-500">Selecciona los gastos que deseas rendir juntos.</p>
+    </div>
+
+    {% if not expenses %}
+    <div class="card text-center py-12">
+        <span class="i-heroicons-receipt-refund text-gray-300 text-6xl mb-4 block"></span>
+        <p class="text-gray-600 font-medium text-lg mb-2">No tienes gastos rendibles disponibles.</p>
+        <p class="text-gray-500 mb-6 text-sm">Solo puedes agrupar gastos que estén en estado Borrador o Rechazado y no
+            pertenezcan a otro informe.</p>
+        <a href="{{ url_for('expenses.new') }}" class="btn-primary inline-flex">Crear Nuevo Gasto</a>
+    </div>
+    {% else %}
+    <form method="POST" action="{{ url_for('reports.new') }}" x-data="{
+        selectedExpenses: [],
+        expensesData: {
+            {% for e in expenses %}
+            '{{ e.id }}': {{ e.amount }},
+            {% endfor %}
+        },
+        get total() {
+            return this.selectedExpenses.reduce((sum, id) => sum + (this.expensesData[id] || 0), 0);
+        }
+    }">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- Left Side: Report Details -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="card sticky top-24">
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Detalles del Informe</h3>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Título del Informe *</label>
+                            <input type="text" name="title" class="input" placeholder="Ej. Viaje a Santiago Mar/24"
+                                required>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Descripción (Opcional)</label>
+                            <textarea name="description" rows="3" class="input"></textarea>
+                        </div>
+
+                        <div class="pt-4 border-t border-gray-100">
+                            <div class="flex justify-between items-center mb-1 text-sm text-gray-500">
+                                <span>Gastos Seleccionados:</span>
+                                <span class="font-bold text-gray-900" x-text="selectedExpenses.length"></span>
+                            </div>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="text-gray-700 font-medium">Total Informe:</span>
+                                <span class="text-2xl font-black text-primary">$<span
+                                        x-text="total.toLocaleString('es-CL')"></span></span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary w-full mt-4" :disabled="selectedExpenses.length === 0">
+                            Crear Informe
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: Expenses Selection List -->
+            <div class="lg:col-span-2">
+                <h3 class="text-lg font-bold text-gray-900 mb-4">Selecciona los Gastos</h3>
+
+                <div class="space-y-3">
+                    {% for expense in expenses %}
+                    <label class="card-compact block cursor-pointer hover:border-primary/50 transition-colors"
+                        :class="{ 'border-primary bg-primary-light/10': selectedExpenses.includes('{{ expense.id }}') }">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0 mt-1 mr-4">
+                                <input type="checkbox" name="expense_ids" value="{{ expense.id }}"
+                                    x-model="selectedExpenses"
+                                    class="w-5 h-5 text-primary border-gray-300 rounded focus:ring-primary">
+                            </div>
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <h4 class="text-base font-bold text-gray-900">{{ expense.merchant or 'Sin
+                                            comercio' }}</h4>
+                                        <div class="text-xs font-medium text-gray-500 mt-1">{{ expense.category.name if
+                                            expense.category else 'Sin categoría' }}</div>
+                                        <div class="text-xs text-gray-400 mt-0.5">{{ expense.date.strftime('%d/%m/%Y')
+                                            }}</div>
+                                    </div>
+                                    <div class="text-lg font-black text-gray-900">
+                                        ${{ "{:,.0f}".format(expense.amount) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

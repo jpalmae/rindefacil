@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+
+{% block title %}Informe: {{ report.title }} - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4 max-w-5xl mx-auto">
+
+    <!-- Encabezado y Estado -->
+    <div class="flex flex-col md:flex-row md:justify-between md:items-start mb-6 gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <a href="{{ url_for('reports.index') }}" class="text-gray-400 hover:text-primary transition-colors">
+                    <span class="i-heroicons-arrow-left text-xl block"></span>
+                </a>
+                <h1 class="text-2xl font-bold text-gray-900">{{ report.title }}</h1>
+                {% if report.status == 'draft' %}
+                <span class="badge-yellow uppercase tracking-tighter text-[10px] px-2 py-0.5">Borrador</span>
+                {% elif report.status == 'in_review' %}
+                <span
+                    class="badge bg-indigo-100 text-indigo-700 uppercase tracking-tighter text-[10px] px-2 py-0.5 border border-indigo-200">En
+                    Revisión</span>
+                {% elif report.status == 'approved' %}
+                <span class="badge-green uppercase tracking-tighter text-[10px] px-2 py-0.5">Aprobado</span>
+                {% elif report.status == 'rejected' %}
+                <span class="badge-red uppercase tracking-tighter text-[10px] px-2 py-0.5">Rechazado</span>
+                {% else %}
+                <span class="badge bg-gray-100 text-gray-600 uppercase tracking-tighter text-[10px] px-2 py-0.5">{{
+                    report.status }}</span>
+                {% endif %}
+            </div>
+            <p class="text-gray-500 ml-8 text-sm">Creado por {{ report.user.full_name }} el {{
+                report.created_at.strftime('%d/%m/%Y') }}</p>
+            {% if report.description %}
+            <p class="text-gray-700 mt-2 ml-8 italic text-sm">"{{ report.description }}"</p>
+            {% endif %}
+        </div>
+
+        <!-- Acciones según rol y estado -->
+        <div class="flex flex-col sm:flex-row gap-2 w-full md:w-auto mt-2 md:mt-0 ml-8 md:ml-0">
+            <!-- Empleados: Botón Enviar -->
+            {% if report.status == 'draft' and current_user.id == report.user_id %}
+            <form action="{{ url_for('reports.submit', id=report.id) }}" method="POST" class="w-full">
+                <button type="submit" class="btn-primary w-full shadow-lg shadow-primary/20">
+                    <span class="i-heroicons-paper-airplane mr-2"></span> Enviar a Aprobación
+                </button>
+            </form>
+            {% endif %}
+
+            <!-- Aprobadores: Botones Aprobar/Rechazar (Solo si toca en el flujo) -->
+            {% set can_approve_now = false %}
+            {% if report.status == 'in_review' %}
+            {% if not report.approval_flow_id %}
+            {% if current_user.has_role('admin') or current_user.has_role('manager') %}
+            {% set can_approve_now = true %}
+            {% endif %}
+            {% else %}
+            {# Validar si el usuario actual es el aprobador del paso actual #}
+            {% set current_step_obj = report.approval_flow.steps|selectattr('step_number', 'equalto',
+            report.current_step)|first %}
+            {% if current_step_obj %}
+            {% if current_step_obj.approver_type == 'role' and current_user.has_role(current_step_obj.approver_target)
+            %}
+            {% set can_approve_now = true %}
+            {% elif current_step_obj.approver_type == 'user' and current_user.id|string ==
+            current_step_obj.approver_target %}
+            {% set can_approve_now = true %}
+            {% elif current_step_obj.approver_type == 'manager' and report.user.manager_id == current_user.id %}
+            {% set can_approve_now = true %}
+            {% elif current_user.has_role('admin') %}
+            {% set can_approve_now = true %}
+            {% endif %}
+            {% endif %}
+            {% endif %}
+            {% endif %}
+
+            {% if can_approve_now %}
+            <div x-data="{ open: false }" class="w-full sm:w-auto">
+                <button @click="open = true" class="btn bg-success text-white hover:bg-success-dark w-full shadow-md">
+                    <span class="i-heroicons-check-circle mr-2"></span> Gestionar Aprobación
+                </button>
+
+                <!-- Modal para comentarios -->
+                <div x-show="open"
+                    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                    x-cloak>
+                    <div @click.away="open = false"
+                        class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+                        <h2 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                            <span class="i-heroicons-chat-bubble-left-right text-success mr-2"></span> Decision de
+                            Aprobación
+                        </h2>
+                        <form id="approvalForm" method="POST">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Comentarios (Opcional)</label>
+                            <textarea name="comment" class="input w-full h-24 mb-6"
+                                placeholder="Escribe aquí tus observaciones..."></textarea>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <button type="submit" formaction="{{ url_for('reports.reject', id=report.id) }}"
+                                    class="btn border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center">
+                                    <span class="i-heroicons-x-mark mr-2"></span> Rechazar
+                                </button>
+                                <button type="submit" formaction="{{ url_for('reports.approve', id=report.id) }}"
+                                    class="btn bg-success text-white hover:bg-success-dark flex items-center justify-center">
+                                    <span class="i-heroicons-check mr-2"></span> Aprobar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Botón Exportar PDF -->
+            {% if report.status in ['approved', 'paid'] %}
+            <a href="{{ url_for('reports.export_pdf', id=report.id) }}"
+                class="btn-outline shadow-md w-full md:w-auto mt-2 md:mt-0">
+                <span class="i-heroicons-document-arrow-down mr-2"></span> PDF
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Summary Widgets -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="card p-4 border-l-4 border-primary">
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto</p>
+            <p class="text-2xl font-black text-primary mt-1">${{ "{:,.0f}".format(report.total_amount) }}</p>
+        </div>
+        <div class="card p-4">
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Comprobantes</p>
+            <p class="text-2xl font-black text-gray-900 mt-1">{{ expense_count }}</p>
+        </div>
+        <div class="card p-4 col-span-2 md:col-span-2 bg-gradient-to-br from-white to-gray-50/50">
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-3">Progreso de Aprobación</p>
+
+            {% if not report.approval_flow_id %}
+            <!-- Timeline básica -->
+            <div class="flex items-center text-xs font-semibold text-gray-500 relative mt-2">
+                <div class="absolute left-0 top-1.5 w-full h-0.5 bg-gray-200 -z-10 rounded"></div>
+                <div class="flex-1 text-left flex flex-col justify-center bg-transparent">
+                    <div class="w-2.5 h-2.5 rounded-full bg-primary mb-1"></div>
+                    <span class="text-primary text-[9px]">Borrador</span>
+                </div>
+                <div class="flex-1 text-center flex flex-col items-center">
+                    <div
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-indigo-500' if report.status in ['in_review', 'approved'] else 'bg-gray-300' }} mb-1">
+                    </div>
+                    <span
+                        class="text-[9px] {{ 'text-indigo-500' if report.status in ['in_review', 'approved'] else 'text-gray-400' }}">Revisión</span>
+                </div>
+                <div class="flex-1 text-right flex flex-col items-end">
+                    <div
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if report.status == 'approved' else 'bg-gray-300' }} mb-1">
+                    </div>
+                    <span
+                        class="text-[9px] {{ 'text-success' if report.status == 'approved' else 'text-gray-400' }}">Aprobado</span>
+                </div>
+            </div>
+            {% else %}
+            <!-- Timeline Dinámica Multi-paso -->
+            <div class="flex items-center text-xs font-semibold text-gray-500 relative mt-2">
+                {% set total_steps = report.approval_flow.steps|length %}
+                <div class="absolute left-0 top-1.5 w-full h-0.5 bg-gray-100 -z-10 rounded"></div>
+
+                <!-- Paso Inicial -->
+                <div class="flex-none w-12 text-left flex flex-col justify-center">
+                    <div class="w-2.5 h-2.5 rounded-full bg-primary mb-1"></div>
+                    <span class="text-primary text-[8px] uppercase">Enviado</span>
+                </div>
+
+                {% for step in report.approval_flow.steps %}
+                <div class="flex-1 flex flex-col items-center">
+                    {% set is_past = report.current_step > step.step_number or report.status == 'approved' %}
+                    {% set is_current = report.current_step == step.step_number and report.status == 'in_review' %}
+                    <div
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' if is_past else ('bg-indigo-500 ring-2 ring-indigo-200 animate-pulse' if is_current else 'bg-gray-200') }} mb-1">
+                    </div>
+                    <span
+                        class="text-[8px] uppercase font-bold {{ 'text-indigo-600' if is_current else ('text-success' if is_past else 'text-gray-400') }}">
+                        {{ step.approver_target|capitalize if step.approver_type == 'role' else 'Paso ' ~
+                        step.step_number }}
+                    </span>
+                </div>
+                {% endfor %}
+
+                <!-- Paso Final -->
+                <div class="flex-none w-12 text-right flex flex-col items-end">
+                    <div
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' if report.status == 'approved' else 'bg-gray-200' }} mb-1">
+                    </div>
+                    <span
+                        class="text-[8px] uppercase font-bold {{ 'text-success' if report.status == 'approved' else 'text-gray-400' }}">Fin</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Layout: Gastos e Historial -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2">
+            <h3 class="text-lg font-bold text-gray-900 mb-4 px-1 flex items-center">
+                <span class="i-heroicons-table-cells text-gray-400 mr-2"></span> Detalle de Gastos
+            </h3>
+            <div class="space-y-3">
+                {% for expense in expenses %}
+                <div class="card-compact relative overflow-hidden flex flex-row justify-between items-center group">
+                    <div class="flex items-center gap-4 flex-1">
+                        <div
+                            class="w-10 h-10 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center flex-shrink-0 text-gray-400">
+                            <span
+                                class="{{ 'i-heroicons-shopping-cart' if expense.category and 'comida' in expense.category.name|lower else 'i-heroicons-receipt-receipt' }}"></span>
+                        </div>
+                        <div>
+                            <h4 class="text-base font-bold text-gray-900 leading-tight">{{ expense.merchant or 'Gasto'
+                                }}</h4>
+                            <div class="text-xs font-medium text-gray-500 mt-0.5">{{ expense.category.name if
+                                expense.category else 'General' }} • {{ expense.date.strftime('%d/%m/%Y') }}</div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4 text-right">
+                        <div class="text-lg font-black text-gray-900">
+                            ${{ "{:,.0f}".format(expense.amount) }}
+                        </div>
+                        {% if expense.receipt_url %}
+                        <button type="button" @click='openReceiptViewer({{ expense.receipt_url|tojson }})'
+                            class="w-8 h-8 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-primary hover:text-white transition-all">
+                            <span class="i-heroicons-eye text-sm"></span>
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="absolute inset-y-0 left-0 w-1 bg-gray-200"></div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Sidebar: Historial de Auditoría -->
+        <div class="space-y-6">
+            <h3 class="text-lg font-bold text-gray-900 px-1 flex items-center">
+                <span class="i-heroicons-shield-check text-gray-400 mr-2"></span> Auditoría
+            </h3>
+
+            <div
+                class="relative pl-6 space-y-6 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100">
+                {% if not report.decisions %}
+                <p class="text-sm text-gray-400 italic">No hay registros aún.</p>
+                {% endif %}
+
+                {% for decision in report.decisions %}
+                <div class="relative">
+                    <div
+                        class="absolute -left-[23px] top-1 w-4 h-4 rounded-full border-2 border-white {{ 'bg-success' if decision.decision == 'approved' else 'bg-red-500' }} shadow-sm">
+                    </div>
+                    <div>
+                        <p
+                            class="text-[11px] font-bold uppercase tracking-wider {{ 'text-success' if decision.decision == 'approved' else 'text-red-600' }}">
+                            {{ 'Aprobado' if decision.decision == 'approved' else 'Rechazado' }} (Paso {{
+                            decision.step_number }})
+                        </p>
+                        <p class="text-xs text-gray-900 font-semibold mt-0.5">{{ decision.user.full_name }}</p>
+                        <p class="text-[10px] text-gray-400">{{ decision.decided_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                        {% if decision.comments %}
+                        <div class="mt-2 p-2 bg-gray-50 rounded-lg text-xs text-gray-600 border border-gray-100 italic">
+                            "{{ decision.comments }}"
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4">
+    <div class="mb-8">
+        <h1 class="text-2xl font-bold text-gray-900">Hola, {{ current_user.full_name }}</h1>
+        <p class="text-gray-500">Aquí tienes un resumen de tus gastos y rendiciones.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="card bg-white border-l-4 border-gray-400">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Pdte. Rendir</h3>
+            <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_draft) }}</p>
+        </div>
+        <div class="card bg-white border-l-4 border-success">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Aprobados Mes</h3>
+            <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_approved) }}</p>
+        </div>
+        <div
+            class="card bg-primary text-white shadow-lg shadow-primary/30 flex items-center justify-between group overflow-hidden relative">
+            <div class="relative z-10">
+                <h3 class="text-xs font-bold opacity-80 uppercase tracking-widest leading-none mb-3">Nuevo Gasto</h3>
+                <a href="{{ url_for('expenses.new') }}"
+                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-bold rounded-lg text-primary bg-white hover:bg-gray-50 transition-all active:scale-95">
+                    <span class="i-heroicons-plus-circle mr-2 text-lg"></span> Registrar
+                </a>
+            </div>
+            <span
+                class="i-heroicons-receipt-receipt absolute -right-4 -bottom-4 text-8xl opacity-10 group-hover:rotate-12 transition-transform duration-500"></span>
+        </div>
+    </div>
+
+    {% if analytics %}
+    <!-- Analytics Section (Admin/Manager) -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div class="card">
+            <h3 class="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span class="i-heroicons-chart-pie text-gray-400"></span> Gastos por Categoría
+            </h3>
+            <div class="h-64 relative">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+        <div class="card">
+            <h3 class="text-sm font-bold text-gray-900 mb-6 flex items-center gap-2">
+                <span class="i-heroicons-chart-bar text-gray-400"></span> Por Centro de Costo
+            </h3>
+            <div class="h-64 relative">
+                <canvas id="ccChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Expenses -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-medium text-gray-900">Gastos Recientes</h2>
+            <a href="{{ url_for('expenses.index') }}" class="text-sm text-primary hover:text-primary-dark">Ver todos</a>
+        </div>
+
+        {% if recent_expenses %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Comercio</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Categoría</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Estado</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for expense in recent_expenses %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{
+                            expense.date.strftime('%d/%m/%Y') }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{{ expense.merchant or 'Sin
+                            comercio' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {% if expense.category %}
+                            <span class="badge bg-gray-100 text-gray-800">{{ expense.category.name }}</span>
+                            {% else %}
+                            <span class="text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${{
+                            "{:,.0f}".format(expense.amount) }} {{ expense.currency }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if expense.status == 'draft' %}
+                            <span class="badge-yellow">Borrador</span>
+                            {% elif expense.status == 'submitted' %}
+                            <span class="badge bg-blue-100 text-blue-800">Enviado</span>
+                            {% elif expense.status == 'approved' %}
+                            <span class="badge-green">Aprobado</span>
+                            {% elif expense.status == 'rejected' %}
+                            <span class="badge-red">Rechazado</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8">
+            <p class="text-gray-500 mb-4">No tienes gastos registrados aún.</p>
+            <a href="{{ url_for('expenses.new') }}" class="btn-outline">Registrar mi primer gasto</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    {% if analytics %}
+    // Category Chart
+    const catCtx = document.getElementById('categoryChart').getContext('2d');
+    const catData = {{ analytics.by_category | tojson }};
+    new Chart(catCtx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(catData),
+            datasets: [{
+                data: Object.values(catData),
+                backgroundColor: ['#2563EB', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#6B7280'],
+                borderWidth: 0,
+                hoverOffset: 15
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, font: { weight: 'bold', size: 10 } } }
+            },
+            cutout: '70%'
+        }
+    });
+
+    // Cost Center Chart (Actual vs Budget)
+    const ccCtx = document.getElementById('ccChart').getContext('2d');
+    const ccDataList = {{ analytics.by_cost_center | tojson }};
+
+    new Chart(ccCtx, {
+        type: 'bar',
+        data: {
+            labels: ccDataList.map(item => item.name),
+            datasets: [
+                {
+                    label: 'Gastado ($)',
+                    data: ccDataList.map(item => item.actual),
+                    backgroundColor: '#2563EB',
+                    borderRadius: 6
+                },
+                {
+                    label: 'Presupuesto ($)',
+                    data: ccDataList.map(item => item.budget),
+                    backgroundColor: '#E5E7EB',
+                    borderRadius: 6
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: { boxWidth: 10, font: { size: 10 } }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: { display: false },
+                    ticks: { font: { size: 10 } }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { size: 10 } }
+                }
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Pasos del Flujo - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-4xl mx-auto px-4">
+    <div class="mb-8 flex justify-between items-end">
+        <div>
+            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest block mb-1">Configuración de
+                Pasos</span>
+            <h1 class="text-3xl font-black text-gray-900">{{ flow.name }}</h1>
+        </div>
+        <a href="{{ url_for('admin.flows') }}" class="btn-outline">Finalizar</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Add Step Form -->
+        <div class="lg:col-span-1">
+            <div class="bg-gray-900 text-white rounded-3xl p-6 shadow-2xl sticky top-24">
+                <h3 class="text-lg font-bold mb-6">Añadir Paso</h3>
+                <form method="POST">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Tipo
+                                de Aprobador</label>
+                            <select name="approver_type"
+                                class="w-full bg-white/10 border-none rounded-xl text-sm focus:ring-primary py-3">
+                                <option value="manager" class="text-gray-900">Manager del Solicitante</option>
+                                <option value="role" class="text-gray-900">Por Rol (Admin/Gerencia)</option>
+                                <option value="user" class="text-gray-900">Usuario Específico</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label
+                                class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Valor/Target</label>
+                            <input type="text" name="approver_target" placeholder="admin / UUID / id"
+                                class="w-full bg-white/10 border-none rounded-xl text-sm focus:ring-primary py-3 placeholder-white/20">
+                        </div>
+
+                        <button type="submit" class="btn-primary w-full mt-4">Añadir Paso</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Steps List -->
+        <div class="lg:col-span-2 space-y-4">
+            {% for step in flow.steps|sort(attribute='step_number') %}
+            <div
+                class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-center gap-6 group hover:translate-x-2 transition-all">
+                <div
+                    class="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-black text-xl shadow-lg shadow-primary/20">
+                    {{ step.step_number }}
+                </div>
+                <div class="flex-1">
+                    <h4 class="font-bold text-gray-900 uppercase text-xs tracking-widest">
+                        Aprobador: {{ step.approver_type|upper }}
+                    </h4>
+                    <p class="text-sm text-gray-500 font-medium mt-1">Destino: <span class="text-primary font-bold">{{
+                            step.approver_target }}</span></p>
+                </div>
+                <form action="{{ url_for('admin.step_delete', flow_id=flow.id, step_id=step.id) }}" method="POST"
+                    onsubmit="return confirm('¿Eliminar este paso?');" class="inline">
+                    <button type="submit"
+                        class="text-gray-300 hover:text-danger p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span class="i-heroicons-trash"></span>
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+
+            {% if not flow.steps %}
+            <div class="text-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
+                <p class="text-gray-400 font-medium">Aún no hay pasos. Añade el primero a la izquierda.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

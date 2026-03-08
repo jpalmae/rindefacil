@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Gasto - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4 max-w-3xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Registrar Nuevo Gasto</h1>
+        <p class="text-gray-500">Ingresa los detalles de tu comprobante</p>
+    </div>
+
+    <div class="card" x-data="expenseForm()" x-init="init()">
+        <div x-show="isExtracting && fileName"
+            class="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl"
+            x-cloak style="display:none;">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+            <p class="text-lg font-medium text-primary">Analizando recibo con IA...</p>
+            <p class="text-sm text-gray-500">Extrayendo montos y comercio</p>
+        </div>
+
+        <form method="POST" action="{{ url_for('expenses.new') }}" enctype="multipart/form-data" class="space-y-6">
+            <div class="space-y-6">
+                <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 text-center">
+                    <label class="block text-sm font-semibold text-gray-500 uppercase tracking-wider mb-2">Monto
+                        Total</label>
+                    <div class="flex items-center justify-center text-4xl font-black text-gray-900">
+                        <span class="text-gray-400 mr-2">$</span>
+                        <input type="number" step="0.01" name="amount" id="amount"
+                            class="bg-transparent border-none focus:ring-0 text-center w-full max-w-[200px] p-0"
+                            placeholder="0.00" required autofocus>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Comprobante</label>
+                    <div class="relative group">
+                        <div
+                            class="relative flex flex-col items-center justify-center w-full h-28 md:h-32 px-4 transition-all duration-200 bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden group-hover:bg-primary-50 group-hover:border-primary cursor-pointer"
+                            role="button" tabindex="0" @click="handleReceiptAreaClick"
+                            @keydown.enter.prevent="handleReceiptAreaClick"
+                            @keydown.space.prevent="handleReceiptAreaClick">
+
+                            <template x-if="imagePreviewUrl && !isPdfFile()">
+                                <div class="w-full h-full flex items-center justify-center overflow-hidden bg-white/70 p-2">
+                                    <img :src="imagePreviewUrl" class="rounded-xl shadow-sm"
+                                        style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; image-orientation: from-image;" />
+                                </div>
+                            </template>
+
+                            <template x-if="imagePreviewUrl && isPdfFile()">
+                                <div class="w-full h-full flex flex-col items-center justify-center text-gray-600">
+                                    <span class="i-heroicons-document-text text-5xl mb-2"></span>
+                                    <p class="text-sm font-medium text-center" x-text="fileName"></p>
+                                </div>
+                            </template>
+
+                            <div x-show="!imagePreviewUrl"
+                                class="flex flex-col items-center justify-center space-y-2 text-primary">
+                                <span class="i-heroicons-camera text-5xl" x-show="!fileName"></span>
+                                <span class="i-heroicons-document-check text-5xl text-success" x-show="fileName"
+                                    x-cloak></span>
+                                <p class="text-sm font-medium text-center text-gray-500"
+                                    x-text="fileName ? fileName : 'Toca para tomar foto o subir'"></p>
+                            </div>
+                            <div x-show="fileName" x-cloak
+                                class="absolute bottom-3 left-0 right-0 px-3 flex items-center justify-center gap-2">
+                                <button type="button" @click.stop="openPreviewModal()"
+                                    class="px-3 py-1.5 rounded-full text-xs font-semibold bg-black/70 text-white hover:bg-black/80">
+                                    Ver grande
+                                </button>
+                                <button type="button" @click.stop="openFilePicker()"
+                                    class="px-3 py-1.5 rounded-full text-xs font-semibold bg-white/95 text-gray-700 border border-gray-200 hover:bg-white">
+                                    Cambiar
+                                </button>
+                            </div>
+                            <input type="file" name="receipt" id="receipt"
+                                class="hidden" accept="image/*,.pdf" x-ref="receipt"
+                                @change="handleFileUpload($event)">
+                        </div>
+                    </div>
+                    <p x-show="ocrMessage" x-cloak class="mt-2 text-sm"
+                        :class="ocrMessageType === 'error' ? 'text-danger-dark' : (ocrMessageType === 'success' ? 'text-success-dark' : 'text-gray-600')"
+                        x-text="ocrMessage"></p>
+                </div>
+
+                <div x-show="previewModalOpen && fileName" x-cloak @click.self="closePreviewModal()"
+                    class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div class="relative w-full max-w-5xl h-[85vh] bg-white rounded-2xl overflow-hidden shadow-2xl">
+                        <button type="button" @click="closePreviewModal()"
+                            class="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/60 text-white hover:bg-black/75 flex items-center justify-center"
+                            aria-label="Cerrar">
+                            <span class="i-heroicons-x-mark text-lg"></span>
+                        </button>
+
+                        <template x-if="isPdfFile()">
+                            <iframe :src="imagePreviewUrl" class="w-full h-full border-0" title="Comprobante"></iframe>
+                        </template>
+                        <template x-if="!isPdfFile()">
+                            <div class="w-full h-full bg-gray-900 p-4 flex items-center justify-center">
+                                <img :src="imagePreviewUrl" alt="Comprobante ampliado"
+                                    style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; image-orientation: from-image;" />
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Comercio / Proveedor *</label>
+                        <input type="text" name="merchant" id="merchant" class="input"
+                            placeholder="Ej. Uber, Latam, Restaurante XY" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Cliente / Partner</label>
+                        <input type="text" name="client_partner" id="client_partner" class="input"
+                            placeholder="Ej. Acme Corp, Proyecto Z">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
+                        <input type="date" name="date" id="date" class="input" required>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                        <select name="category_id" id="category_id" class="input">
+                            <option value="">Seleccione una categoría</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
+                        <textarea name="description" id="description" rows="2" class="input"
+                            placeholder="Explica el motivo del gasto (Mínimo 15 caracteres)" minlength="15"
+                            required></textarea>
+                    </div>
+                </div>
+
+                <div class="pt-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3">
+                    <a href="{{ url_for('expenses.index') }}" class="btn-outline">Cancelar</a>
+                    <button type="submit" class="btn-primary" @click.prevent="submitForm">Guardar Gasto</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function expenseForm() {
+        return {
+            isExtracting: false,
+            fileName: '',
+            imagePreviewUrl: null,
+            selectedFile: null,
+            ocrMessage: '',
+            ocrMessageType: 'info',
+            previewModalOpen: false,
+
+            clearPreview() {
+                if (this.imagePreviewUrl && this.imagePreviewUrl.startsWith('blob:')) {
+                    URL.revokeObjectURL(this.imagePreviewUrl);
+                }
+                this.imagePreviewUrl = null;
+                this.previewModalOpen = false;
+            },
+
+            isPdfFile() {
+                if (!this.selectedFile || !this.fileName) return false;
+                return this.selectedFile.type === 'application/pdf' || this.fileName.toLowerCase().endsWith('.pdf');
+            },
+
+            openPreviewModal() {
+                if (!this.fileName || !this.imagePreviewUrl) return;
+                this.previewModalOpen = true;
+            },
+
+            closePreviewModal() {
+                this.previewModalOpen = false;
+            },
+
+            handleReceiptAreaClick() {
+                if (!this.fileName) {
+                    this.openFilePicker();
+                    return;
+                }
+                this.openPreviewModal();
+            },
+
+            init() {
+                this.isExtracting = false;
+                this.fileName = '';
+                this.clearPreview();
+                this.selectedFile = null;
+                this.ocrMessage = '';
+                this.ocrMessageType = 'info';
+                window.addEventListener('pageshow', () => {
+                    this.isExtracting = false;
+                    this.fileName = '';
+                    this.clearPreview();
+                    this.selectedFile = null;
+                    this.ocrMessage = '';
+                    this.ocrMessageType = 'info';
+                    const receiptInput = document.getElementById('receipt');
+                    if (receiptInput) receiptInput.value = '';
+                });
+            },
+
+            handleFileUpload(event) {
+                const file = event.target.files[0];
+                this.isExtracting = false;
+                this.ocrMessage = '';
+                this.ocrMessageType = 'info';
+                if (!file) {
+                    this.fileName = '';
+                    this.clearPreview();
+                    this.selectedFile = null;
+                    return;
+                }
+
+                this.selectedFile = file;
+                this.fileName = file.name;
+                if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+                    this.clearPreview();
+                    this.imagePreviewUrl = URL.createObjectURL(file);
+                } else {
+                    this.clearPreview();
+                }
+
+                this.runOcr();
+            },
+
+            openFilePicker() {
+                if (this.isExtracting) return;
+                if (this.$refs.receipt) {
+                    this.$refs.receipt.click();
+                }
+            },
+
+            async runOcr() {
+                if (!this.selectedFile || this.isExtracting) return;
+                this.isExtracting = true;
+                this.ocrMessage = '';
+                this.ocrMessageType = 'info';
+                try {
+                    const formData = new FormData();
+                    formData.append('receipt', this.selectedFile);
+
+                    const response = await fetch('{{ url_for("expenses.extract_data") }}', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin'
+                    });
+
+                    if (!response.ok) {
+                        let errorMsg = 'No se pudo analizar el comprobante.';
+                        try {
+                            const errPayload = await response.json();
+                            if (errPayload?.error) errorMsg = errPayload.error;
+                        } catch (_) {}
+                        this.ocrMessage = errorMsg;
+                        this.ocrMessageType = 'error';
+                        this.isExtracting = false;
+                        return;
+                    }
+
+                    const payload = await response.json();
+                    const result = payload.data || payload.result || {};
+                    let updatedFields = 0;
+
+                    if (result.amount) {
+                        document.getElementById('amount').value = result.amount;
+                        updatedFields += 1;
+                    }
+                    if (result.merchant) {
+                        document.getElementById('merchant').value = result.merchant;
+                        updatedFields += 1;
+                    }
+                    if (result.date) {
+                        document.getElementById('date').value = result.date;
+                        updatedFields += 1;
+                    }
+                    if (result.category_id) {
+                        document.getElementById('category_id').value = result.category_id;
+                        updatedFields += 1;
+                    }
+
+                    if (updatedFields > 0) {
+                        this.ocrMessage = 'Datos detectados. Revisa y corrige antes de guardar.';
+                        this.ocrMessageType = 'success';
+                    } else {
+                        this.ocrMessage = 'No se detectaron datos automáticos. Completa el formulario manualmente.';
+                        this.ocrMessageType = 'info';
+                    }
+                } catch (error) {
+                    console.error('OCR Error:', error);
+                    this.ocrMessage = 'Ocurrió un error al analizar la imagen. Intenta nuevamente.';
+                    this.ocrMessageType = 'error';
+                } finally {
+                    this.isExtracting = false;
+                }
+            },
+
+            submitForm() {
+                const form = this.$root.querySelector('form');
+                if (!form.checkValidity()) {
+                    form.reportValidity();
+                    return;
+                }
+                form.submit();
+            }
+        }
+    }
+</script>
+{% endblock %}

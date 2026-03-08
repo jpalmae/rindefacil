@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if flow else 'Nuevo' }} Flujo - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-3xl mx-auto px-4">
+    <div class="mb-8">
+        <a href="{{ url_for('admin.flows') }}"
+            class="text-xs font-bold text-primary uppercase tracking-widest flex items-center gap-1 mb-2">
+            <span class="i-heroicons-arrow-left"></span> Volver a Flujos
+        </a>
+        <h1 class="text-3xl font-black text-gray-900">{{ 'Configurar' if not flow else 'Editar' }} Flujo</h1>
+        <p class="text-gray-500 mt-1">Define el nombre y la regla de activación.</p>
+    </div>
+
+    <form method="POST" class="bg-white rounded-3xl border border-gray-100 shadow-premium p-8">
+        <div class="space-y-6">
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Nombre del
+                    Flujo</label>
+                <input type="text" name="name" required value="{{ flow.name if flow else '' }}"
+                    placeholder="Ej: Gastos Mayores a $500.000"
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Monto Mínimo de
+                    Activación ($)</label>
+                <input type="number" name="min_amount" required
+                    value="{{ flow.trigger_rules.get('min_amount', 0) if flow else 0 }}"
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold">
+                <p class="text-[10px] text-gray-400 mt-2 font-medium italic">Define desde qué monto se activará este
+                    flujo automáticamente.</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Descripción
+                    (Opcional)</label>
+                <textarea name="description" rows="3"
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium">{{ flow.description if flow else '' }}</textarea>
+            </div>
+
+            <button type="submit" class="btn-primary w-full py-4 text-lg shadow-xl shadow-primary/20">
+                {{ 'Siguiente: Configurar Pasos' if not flow else 'Guardar Cambios' }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

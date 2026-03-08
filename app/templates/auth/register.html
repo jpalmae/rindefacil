@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Registro - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-10 min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md">
+        <div class="card shadow-sm rounded-2xl p-8">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Crear Cuenta</h2>
+                <p class="text-gray-500">Regístrate en {{ brand_app_name }}</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('auth.register') }}" class="space-y-4">
+
+                <div>
+                    <label for="company_name" class="block text-sm font-medium text-gray-700 mb-1">Nombre de la
+                        Empresa</label>
+                    <input type="text" class="input" id="company_name" name="company_name" required>
+                </div>
+
+                <div>
+                    <label for="rut" class="block text-sm font-medium text-gray-700 mb-1">RUT Empresa
+                        (Opcional)</label>
+                    <input type="text" class="input" id="rut" name="rut" placeholder="12345678-9">
+                </div>
+
+                <div>
+                    <label for="full_name" class="block text-sm font-medium text-gray-700 mb-1">Tu Nombre
+                        Completo</label>
+                    <input type="text" class="input" id="full_name" name="full_name" required>
+                </div>
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico
+                        Laboral</label>
+                    <input type="email" class="input" id="email" name="email" required>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                        <input type="password" class="input" id="password" name="password" required minlength="8">
+                    </div>
+                    <div>
+                        <label for="password_confirm"
+                            class="block text-sm font-medium text-gray-700 mb-1">Confirmar</label>
+                        <input type="password" class="input" id="password_confirm" name="password_confirm" required>
+                    </div>
+                </div>
+
+                <div class="pt-4">
+                    <button type="submit" class="btn-primary w-full py-2.5">Registrarse y Crear Empresa</button>
+                </div>
+            </form>
+
+            <div class="mt-8 text-center text-sm text-gray-600">
+                <p>¿Ya tienes cuenta? <a href="{{ url_for('auth.login') }}"
+                        class="text-primary hover:text-primary-dark font-semibold">Inicia Sesión</a></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

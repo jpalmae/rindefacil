@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if center else 'Nuevo' }} Centro de Costo - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 flex items-center gap-3">
+        <a href="{{ url_for('admin.cost_centers') }}" class="text-gray-400 hover:text-primary transition-colors">
+            <span class="i-heroicons-arrow-left text-xl block"></span>
+        </a>
+        <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ 'Editar' if center else 'Nuevo' }} Centro de
+            Costo</h1>
+    </div>
+
+    <div class="card p-8 bg-white border border-gray-100 shadow-sm rounded-2xl">
+        <form method="POST" class="space-y-6">
+            <div class="space-y-2">
+                <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Nombre del Centro</label>
+                <input type="text" name="name" value="{{ center.name if center else '' }}" required
+                    class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                    placeholder="Ej: Departamento de Ventas">
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Código Contable</label>
+                <input type="text" name="code" value="{{ center.code if center else '' }}" required
+                    class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                    placeholder="Ej: VNT-001">
+            </div>
+
+            <div class="space-y-2">
+                <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Presupuesto
+                    Mensual</label>
+                <div class="relative rounded-xl shadow-sm">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <span class="text-gray-500 sm:text-sm">$</span>
+                    </div>
+                    <input type="number" name="monthly_budget" value="{{ center.monthly_budget|int if center else 0 }}"
+                        required
+                        class="input pl-7 focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                        placeholder="0.00">
+                </div>
+                <p class="text-xs text-gray-400 mt-1 italic">Este valor se usará para comparar el gasto real en el
+                    dashboard.</p>
+            </div>
+
+            <div class="pt-6 border-t border-gray-100 flex justify-end gap-3">
+                <a href="{{ url_for('admin.cost_centers') }}" class="btn-outline">Cancelar</a>
+                <button type="submit" class="btn-primary">
+                    {{ 'Guardar Cambios' if center else 'Crear Centro de Costo' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

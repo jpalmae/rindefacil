@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Registro de Auditoría - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-4">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Registro de Auditoría</h1>
+        <p class="text-gray-500">Historial completo de acciones y cambios en el sistema</p>
+    </div>
+
+    <div class="card overflow-hidden p-0">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-100">
+                <thead class="bg-gray-50/50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Fecha / Hora</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Usuario</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Acción</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Detalles</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            Entidad</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-50">
+                    {% for log in logs %}
+                    <tr class="hover:bg-gray-50/50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {{ log.created_at.strftime('%d/%m/%Y %H:%M:%S') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div
+                                    class="h-8 w-8 rounded-full bg-primary-light text-primary flex items-center justify-center font-bold text-xs mr-3">
+                                    {{ log.user.full_name[:1] if log.user else 'S' }}
+                                </div>
+                                <div class="text-sm font-medium text-gray-900">
+                                    {{ log.user.full_name if log.user else 'Sistema' }}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                {% if 'create' in log.action %}bg-green-100 text-green-800
+                                {% elif 'approve' in log.action %}bg-blue-100 text-blue-800
+                                {% elif 'reject' in log.action %}bg-red-100 text-red-800
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ log.action }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600">
+                            {{ log.description or '-' }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                            {{ log.entity_type }} ({{ log.entity_id[:8] if log.entity_id else '-' }})
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-gray-500">
+                            No hay registros de auditoría disponibles.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

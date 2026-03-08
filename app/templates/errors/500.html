@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block title %}Error de Servidor - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-[60vh] flex flex-col items-center justify-center text-center px-4">
+    <div class="mb-8 relative">
+        <span class="text-[120px] font-black text-gray-100 leading-none">500</span>
+        <span
+            class="i-heroicons-exclamation-triangle text-6xl text-danger absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2"></span>
+    </div>
+    <h1 class="text-3xl font-black text-gray-900 mb-2">Error Interno del Servidor</h1>
+    <p class="text-gray-500 mb-8 max-w-md">Se ha producido un error inesperado en nuestro lado. Hemos sido notificados y
+        lo estamos revisando.</p>
+    <a href="{{ url_for('dashboard.index') if current_user.is_authenticated else url_for('auth.login') }}"
+        class="btn-primary">
+        Volver al Inicio
+    </a>
+</div>
+{% endblock %}
