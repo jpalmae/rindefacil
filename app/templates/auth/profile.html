@@ -114,6 +114,71 @@
                     <button type="submit" class="btn-primary px-8">Guardar Cambios</button>
                 </div>
             </form>
+
+            <div class="card">
+                <h3 class="text-base font-bold text-gray-900 mb-4">API Keys para Agentes IA</h3>
+                <p class="text-sm text-gray-500 mb-4">
+                    Crea claves de API personales que heredan exactamente tus permisos actuales en la aplicación.
+                    Úsalas con `Authorization: Bearer &lt;API_KEY&gt;` en `/api/v1`.
+                </p>
+
+                {% if new_api_key %}
+                <div class="mb-4 p-4 rounded-xl border border-warning bg-warning-light/60">
+                    <p class="text-sm font-semibold text-warning-dark mb-2">Copia tu nueva API key (se muestra solo una vez)</p>
+                    <code class="block w-full overflow-x-auto text-xs bg-white border border-warning/40 rounded-lg p-3">{{ new_api_key }}</code>
+                </div>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('auth.create_api_key') }}" class="flex flex-col md:flex-row gap-3 mb-5">
+                    <input type="text" name="key_name" class="input flex-1" placeholder="Nombre de la key (ej: Agente GPT Finanzas)" maxlength="100">
+                    <button type="submit" class="btn-primary whitespace-nowrap">Generar API Key</button>
+                </form>
+
+                <div class="overflow-x-auto border border-gray-100 rounded-xl">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50/70 text-gray-600">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold">Nombre</th>
+                                <th class="px-4 py-3 text-left font-semibold">Prefijo</th>
+                                <th class="px-4 py-3 text-left font-semibold">Creada</th>
+                                <th class="px-4 py-3 text-left font-semibold">Último uso</th>
+                                <th class="px-4 py-3 text-left font-semibold">Estado</th>
+                                <th class="px-4 py-3 text-right font-semibold">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for key in api_keys | default([], true) %}
+                            <tr>
+                                <td class="px-4 py-3">{{ key.name }}</td>
+                                <td class="px-4 py-3 font-mono text-xs">{{ key.key_prefix }}...</td>
+                                <td class="px-4 py-3">{{ key.created_at.strftime('%d/%m/%Y %H:%M') if key.created_at else '-' }}</td>
+                                <td class="px-4 py-3">{{ key.last_used_at.strftime('%d/%m/%Y %H:%M') if key.last_used_at else 'Nunca' }}</td>
+                                <td class="px-4 py-3">
+                                    {% if key.revoked_at %}
+                                    <span class="badge-red">Revocada</span>
+                                    {% else %}
+                                    <span class="badge-green">Activa</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    {% if not key.revoked_at %}
+                                    <form method="POST" action="{{ url_for('auth.revoke_api_key', key_id=key.id) }}" class="inline">
+                                        <button type="submit" class="btn-outline !py-1.5 !px-3 !text-xs">Revocar</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-xs text-gray-400">-</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="px-4 py-6 text-center text-gray-500">No tienes API keys creadas.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>

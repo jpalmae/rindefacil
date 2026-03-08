@@ -41,6 +41,7 @@ class User(UserMixin, db.Model):
     # Expenses and Reports
     expenses = db.relationship('Expense', back_populates='user', foreign_keys='Expense.user_id')
     reports = db.relationship('Report', back_populates='user', lazy='dynamic')
+    api_keys = db.relationship('UserApiKey', back_populates='user', lazy='dynamic', cascade='all, delete-orphan')
 
     def check_password(self, password):
         import bcrypt

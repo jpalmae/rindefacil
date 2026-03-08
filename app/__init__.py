@@ -36,12 +36,14 @@ def create_app(config_name=None):
     from app.blueprints.expenses import expenses_bp
     from app.blueprints.reports import reports_bp
     from app.blueprints.admin import admin_bp
+    from app.blueprints.api import api_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(expenses_bp, url_prefix='/expenses')
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(admin_bp, url_prefix='/admin')
+    app.register_blueprint(api_bp, url_prefix='/api/v1')
 
     # Inject common template context once per request to avoid repeated DB work in Jinja
     @app.context_processor

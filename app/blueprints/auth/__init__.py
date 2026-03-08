@@ -1,9 +1,12 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from datetime import datetime
+
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models.company import Company
 from app.models.user import User, UserRole
+from app.models.api_key import UserApiKey
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -85,6 +88,11 @@ def logout():
 @auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required
 def profile():
+    if request.method == 'GET':
+        new_api_key = session.pop('new_api_key', None)
+        api_keys = current_user.api_keys.order_by(UserApiKey.created_at.desc()).all()
+        return render_template('auth/profile.html', api_keys=api_keys, new_api_key=new_api_key)
+
     if request.method == 'POST':
         full_name = request.form.get('full_name')
         password = request.form.get('password')
@@ -111,5 +119,33 @@ def profile():
         db.session.commit()
         flash('Perfil actualizado correctamente.', 'success')
         return redirect(url_for('auth.profile'))
-        
+
     return render_template('auth/profile.html')
+
+
+@auth_bp.route('/profile/api-keys', methods=['POST'])
+@login_required
+def create_api_key():
+    key_name = (request.form.get('key_name') or '').strip() or 'Agente IA'
+
+    api_key, raw_key = UserApiKey.build_for_user(current_user, key_name)
+    db.session.add(api_key)
+    db.session.commit()
+
+    session['new_api_key'] = raw_key
+    flash('API key generada. Copia y guarda esta clave ahora; luego no se volverá a mostrar.', 'success')
+    return redirect(url_for('auth.profile'))
+
+
+@auth_bp.route('/profile/api-keys/<uuid:key_id>/revoke', methods=['POST'])
+@login_required
+def revoke_api_key(key_id):
+    api_key = UserApiKey.query.filter_by(id=key_id, user_id=current_user.id).first_or_404()
+    if api_key.revoked_at:
+        flash('Esta API key ya estaba revocada.', 'info')
+        return redirect(url_for('auth.profile'))
+
+    api_key.revoked_at = datetime.utcnow()
+    db.session.commit()
+    flash('API key revocada correctamente.', 'warning')
+    return redirect(url_for('auth.profile'))

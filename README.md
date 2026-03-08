@@ -128,6 +128,23 @@ Permite configurar:
 
 Valor por defecto global: `Rinde Fácil`.
 
+## Mi Perfil y API Keys
+
+Ruta: `Mi Perfil` (`/auth/profile`).
+
+Cada usuario puede crear sus propias API keys para integraciones con agentes IA:
+
+- Generación de API key personal (se muestra solo una vez al crearla).
+- Revocación manual de keys activas.
+- Registro de último uso (`last_used_at`).
+- Herencia de permisos: la key opera con el mismo rol/permisos del usuario creador.
+
+Para consumir la API con una key:
+
+```http
+Authorization: Bearer rfk_...
+```
+
 ## OCR y comportamiento de gastos
 
 - El análisis se dispara automáticamente al seleccionar un archivo en “Nuevo Gasto”.
@@ -135,11 +152,92 @@ Valor por defecto global: `Rinde Fácil`.
 - El endpoint de extracción es `POST /expenses/extract-data`.
 - Archivos se guardan localmente en `app/static/uploads`.
 
+## API REST (v1)
+
+Base URL:
+
+- `http://localhost:5001/api/v1`
+
+Autenticación:
+
+- Bearer JWT vía `Authorization: Bearer <token>`.
+- API Key personal (generada en `Mi Perfil`): `Authorization: Bearer rfk_...`.
+- Las API keys heredan el rol/permisos del usuario que las crea y pueden revocarse desde `Mi Perfil`.
+
+### Endpoints principales
+
+- `POST /auth/token`: login API (email/password) y entrega token JWT.
+- `GET /me`: datos del usuario autenticado.
+- `GET /categories`: categorías activas de la empresa.
+- `POST /expenses/analyze`: analiza una boleta (multipart `receipt`) y devuelve campos OCR.
+- `GET /expenses`: lista gastos (paginable por `limit` y `offset`).
+- `POST /expenses`: crea gasto; acepta imagen/PDF y puede autocompletar con IA.
+- `GET /reports`: lista rendiciones.
+- `POST /reports`: crea rendición a partir de `expense_ids`.
+- `GET /reports/{id}`: detalle completo (gastos + decisiones).
+- `POST /reports/{id}/submit`: envía rendición al flujo de aprobación.
+- `POST /reports/{id}/approve`: aprueba un paso o aprobación final.
+- `POST /reports/{id}/reject`: rechaza rendición con motivo.
+- `GET /reports/pending-approvals`: mejora recomendada, lista rendiciones pendientes que el usuario actual puede aprobar.
+
+### Ejemplos rápidos
+
+1. Obtener token:
+
+```bash
+curl -X POST http://localhost:5001/api/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@demo.com","password":"admin123"}'
+```
+
+1.1. Consumir API con API key de usuario:
+
+```bash
+curl -X GET http://localhost:5001/api/v1/me \
+  -H "Authorization: Bearer rfk_..."
+```
+
+2. Analizar boleta con IA:
+
+```bash
+curl -X POST http://localhost:5001/api/v1/expenses/analyze \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "receipt=@/ruta/boleta.jpg"
+```
+
+3. Crear gasto con imagen (OCR aplicado):
+
+```bash
+curl -X POST http://localhost:5001/api/v1/expenses \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "description=Traslado cliente Santiago centro" \
+  -F "date=2026-03-08" \
+  -F "receipt=@/ruta/boleta.jpg"
+```
+
+4. Crear rendición:
+
+```bash
+curl -X POST http://localhost:5001/api/v1/reports \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Rendicion Marzo","description":"Semana 1","expense_ids":["<EXPENSE_ID_1>","<EXPENSE_ID_2>"]}'
+```
+
+5. Aprobar rendición:
+
+```bash
+curl -X POST http://localhost:5001/api/v1/reports/<REPORT_ID>/approve \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"comment":"Aprobado por jefatura"}'
+```
+
 ## Estructura del proyecto
 
 ```text
 app/
-  blueprints/      # auth, dashboard, expenses, reports, admin
+  blueprints/      # auth, dashboard, expenses, reports, admin, api
   models/          # entidades SQLAlchemy
   services/        # OCR, notificaciones, correo, auditoría, exportación
   templates/       # vistas Jinja
@@ -181,4 +279,3 @@ ssh-add ~/.ssh/id_rsa
 - `.env` está excluido del repo.
 - No subas credenciales reales en archivos versionados.
 - Cambia secretos por defecto antes de producción.
-

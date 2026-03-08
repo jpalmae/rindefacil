@@ -1,0 +1,1135 @@
+import os
+import re
+import uuid
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
+from functools import wraps
+from uuid import UUID
+
+import jwt
+from flask import Blueprint, current_app, g, jsonify, request
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload, selectinload
+from werkzeug.utils import secure_filename
+
+from app.extensions import db
+from app.models import (
+    ApprovalDecision,
+    ApprovalFlow,
+    ApprovalStep,
+    AuditLog,
+    Category,
+    Expense,
+    ExpenseStatus,
+    Policy,
+    Report,
+    ReportStatus,
+    User,
+    UserApiKey,
+    UserRole,
+)
+from app.services.notification_service import notify_approval_needed, notify_report_approved, notify_report_rejected
+from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
+
+
+api_bp = Blueprint("api", __name__)
+
+ALLOWED_RECEIPT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
+REVIEW_STATUSES = {ReportStatus.UNDER_REVIEW, "in_review"}
+
+
+def _ok(data=None, status=200):
+    payload = {"ok": True}
+    if data is not None:
+        payload["data"] = data
+    return jsonify(payload), status
+
+
+def _error(message, status=400, code="bad_request", details=None):
+    err = {"code": code, "message": message}
+    if details is not None:
+        err["details"] = details
+    return jsonify({"ok": False, "error": err}), status
+
+
+def _is_admin_like(user):
+    return user.role in {UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER}
+
+
+def _parse_amount(value):
+    if value is None:
+        return None
+
+    if isinstance(value, Decimal):
+        return value
+
+    if isinstance(value, (int, float)):
+        return Decimal(str(value))
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    cleaned = re.sub(r"[^\d,.\-]", "", raw)
+    if not cleaned:
+        return None
+
+    negative = cleaned.startswith("-")
+    cleaned = cleaned.replace("-", "")
+    if not cleaned:
+        return None
+
+    if "." in cleaned and "," in cleaned:
+        last_dot = cleaned.rfind(".")
+        last_comma = cleaned.rfind(",")
+        decimal_sep = "." if last_dot > last_comma else ","
+        thousand_sep = "," if decimal_sep == "." else "."
+        normalized = cleaned.replace(thousand_sep, "").replace(decimal_sep, ".")
+    elif cleaned.count(".") > 1 and "," not in cleaned:
+        normalized = cleaned.replace(".", "")
+    elif cleaned.count(",") > 1 and "." not in cleaned:
+        normalized = cleaned.replace(",", "")
+    elif "." in cleaned and "," not in cleaned:
+        left, right = cleaned.split(".", 1)
+        if len(right) == 3 and len(left) >= 1:
+            normalized = f"{left}{right}"
+        else:
+            normalized = cleaned
+    elif "," in cleaned and "." not in cleaned:
+        left, right = cleaned.split(",", 1)
+        if len(right) == 3 and len(left) >= 1:
+            normalized = f"{left}{right}"
+        else:
+            normalized = cleaned.replace(",", ".")
+    else:
+        normalized = cleaned
+
+    if negative:
+        normalized = f"-{normalized}"
+
+    try:
+        return Decimal(normalized)
+    except InvalidOperation:
+        return None
+
+
+def _decimal_as_text(value):
+    amount = _parse_amount(value)
+    if amount is None:
+        return None
+
+    normalized = amount.normalize()
+    if normalized == normalized.to_integral():
+        return str(int(normalized))
+    return format(normalized, "f")
+
+
+def _parse_date(value):
+    if not value:
+        return None
+
+    if isinstance(value, date):
+        return value
+
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+def _data_dict():
+    if request.is_json:
+        return request.get_json(silent=True) or {}
+    return request.form.to_dict(flat=True)
+
+
+def _uuid_or_none(value):
+    if not value:
+        return None
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ensure_auth_header():
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    return auth_header.split(" ", 1)[1].strip()
+
+
+def _serialize_user(user):
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "role": user.role,
+        "company_id": str(user.company_id),
+        "is_active": bool(user.is_active),
+    }
+
+
+def _serialize_expense(expense):
+    return {
+        "id": str(expense.id),
+        "user_id": str(expense.user_id),
+        "company_id": str(expense.company_id),
+        "report_id": str(expense.report_id) if expense.report_id else None,
+        "amount": _decimal_as_text(expense.amount),
+        "currency": expense.currency,
+        "date": expense.date.isoformat() if expense.date else None,
+        "merchant": expense.merchant,
+        "client_partner": expense.client_partner,
+        "description": expense.description,
+        "status": expense.status,
+        "category": {
+            "id": str(expense.category.id),
+            "name": expense.category.name,
+        }
+        if expense.category
+        else None,
+        "receipt_url": expense.receipt_url,
+        "is_duplicate": bool(expense.is_duplicate),
+        "duplicate_of_id": str(expense.duplicate_of_id) if expense.duplicate_of_id else None,
+        "created_at": expense.created_at.isoformat() if expense.created_at else None,
+        "updated_at": expense.updated_at.isoformat() if expense.updated_at else None,
+    }
+
+
+def _serialize_report(report, expense_count=None, include_expenses=False, include_decisions=False):
+    data = {
+        "id": str(report.id),
+        "company_id": str(report.company_id),
+        "user": {
+            "id": str(report.user.id),
+            "full_name": report.user.full_name,
+            "email": report.user.email,
+        }
+        if report.user
+        else None,
+        "title": report.title,
+        "description": report.description,
+        "status": report.status,
+        "total_amount": _decimal_as_text(report.total_amount),
+        "currency": report.currency,
+        "approval_flow_id": str(report.approval_flow_id) if report.approval_flow_id else None,
+        "current_step": report.current_step,
+        "expense_count": expense_count if expense_count is not None else report.expenses.count(),
+        "submitted_at": report.submitted_at.isoformat() if report.submitted_at else None,
+        "approved_at": report.approved_at.isoformat() if report.approved_at else None,
+        "created_at": report.created_at.isoformat() if report.created_at else None,
+        "updated_at": report.updated_at.isoformat() if report.updated_at else None,
+    }
+
+    if include_expenses:
+        expenses = report.expenses.order_by(Expense.created_at.desc()).all()
+        data["expenses"] = [_serialize_expense(exp) for exp in expenses]
+
+    if include_decisions:
+        data["decisions"] = [
+            {
+                "id": str(decision.id),
+                "user_id": str(decision.user_id),
+                "user_name": decision.user.full_name if decision.user else None,
+                "step_number": decision.step_number,
+                "decision": decision.decision,
+                "comments": decision.comments,
+                "decided_at": decision.decided_at.isoformat() if decision.decided_at else None,
+            }
+            for decision in report.decisions
+        ]
+
+    return data
+
+
+def _save_receipt(file_storage, company_id):
+    filename = secure_filename(file_storage.filename or "receipt")
+    if not filename:
+        filename = "receipt"
+
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in ALLOWED_RECEIPT_EXTENSIONS:
+        return None, None, _error(
+            "Formato de comprobante no permitido. Usa PNG, JPG, JPEG, WEBP o PDF.",
+            status=415,
+            code="unsupported_media_type",
+        )
+
+    unique_name = f"{company_id}_{uuid.uuid4().hex}_{filename}"
+    file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
+    file_storage.save(file_path)
+    return file_path, f"/static/uploads/{unique_name}", None
+
+
+def _extract_receipt_data_from_file(file_storage, user):
+    filename = secure_filename(file_storage.filename or "receipt")
+    if not filename:
+        filename = "receipt"
+
+    temp_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_path = os.path.join(temp_dir, f"tmp_ocr_{user.id}_{uuid.uuid4().hex}_{filename}")
+    file_storage.save(temp_path)
+
+    try:
+        data = extract_expense_data(temp_path) or {}
+        if data.get("amount") is not None:
+            normalized = _decimal_as_text(data.get("amount"))
+            if normalized is not None:
+                data["amount"] = normalized
+
+        if data.get("category"):
+            category = Category.query.filter(
+                Category.company_id == user.company_id,
+                Category.name.ilike(f"%{data['category']}%"),
+            ).first()
+            if category:
+                data["category_id"] = str(category.id)
+
+        return data
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                current_app.logger.warning("No se pudo eliminar archivo temporal OCR: %s", temp_path)
+
+
+def _append_duplicate_flags(expense):
+    if expense.receipt_url:
+        local_path = os.path.join(current_app.root_path, expense.receipt_url.lstrip("/"))
+        if os.path.exists(local_path):
+            receipt_hash = calculate_receipt_hash(local_path)
+            if receipt_hash:
+                expense.receipt_hash = receipt_hash
+                existing = Expense.query.filter(
+                    Expense.company_id == expense.company_id,
+                    Expense.receipt_hash == receipt_hash,
+                    Expense.id != expense.id,
+                ).first()
+                if existing:
+                    expense.is_duplicate = True
+                    expense.duplicate_of_id = existing.id
+
+    if not expense.is_duplicate:
+        existing_data = Expense.query.filter(
+            Expense.company_id == expense.company_id,
+            Expense.amount == expense.amount,
+            Expense.date == expense.date,
+            Expense.id != expense.id,
+        ).first()
+        if existing_data:
+            expense.is_duplicate = True
+            expense.duplicate_of_id = existing_data.id
+
+
+def _policy_warnings_for_expense(expense):
+    warnings = []
+    company_policy = Policy.query.filter_by(company_id=expense.company_id, is_active=True).first()
+    if not company_policy:
+        return warnings
+
+    rules = company_policy.rules or {}
+    max_amount = rules.get("max_amount")
+    if max_amount is not None:
+        try:
+            if expense.amount > Decimal(str(max_amount)):
+                warnings.append(
+                    f"El monto excede el maximo permitido por politica ({_decimal_as_text(max_amount)})."
+                )
+        except (InvalidOperation, ValueError):
+            pass
+
+    return warnings
+
+
+def _select_approval_flow(company_id, total_amount):
+    flows = ApprovalFlow.query.filter_by(company_id=company_id, is_active=True).all()
+    if not flows:
+        return None
+
+    eligible = []
+    total = Decimal(str(total_amount or 0))
+    for flow in flows:
+        rules = flow.trigger_rules or {}
+        min_amount = Decimal(str(rules.get("min_amount", 0) or 0))
+        if total >= min_amount:
+            eligible.append((min_amount, flow))
+
+    if not eligible:
+        return None
+
+    eligible.sort(key=lambda x: x[0], reverse=True)
+    return eligible[0][1]
+
+
+def _current_step(report):
+    if not report.approval_flow_id or not report.current_step:
+        return None
+
+    return ApprovalStep.query.filter_by(
+        flow_id=report.approval_flow_id,
+        step_number=report.current_step,
+    ).first()
+
+
+def _user_can_review_step(user, report, step):
+    if step is None:
+        return False
+
+    if user.role in {UserRole.SUPERADMIN, UserRole.ADMIN}:
+        return True
+
+    if step.approver_type == "role":
+        return user.has_role(step.approver_target)
+
+    if step.approver_type == "user":
+        return str(user.id) == str(step.approver_target)
+
+    if step.approver_type == "manager":
+        return report.user and report.user.manager_id == user.id
+
+    return False
+
+
+def _notify_step_if_needed(report, step):
+    if step is None:
+        return
+
+    if step.approver_type == "role":
+        approvers = User.query.filter_by(company_id=report.company_id, role=step.approver_target).all()
+        for approver in approvers:
+            notify_approval_needed(approver.id, report)
+    elif step.approver_type == "user":
+        notify_approval_needed(step.approver_target, report)
+    elif step.approver_type == "manager" and report.user and report.user.manager_id:
+        notify_approval_needed(report.user.manager_id, report)
+
+
+def _audit(user, action, entity_type=None, entity_id=None, description=None, changes=None):
+    entry = AuditLog(
+        company_id=user.company_id,
+        user_id=user.id,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        description=description,
+        changes=changes,
+        ip_address=request.remote_addr,
+        user_agent=request.user_agent.string if request.user_agent else None,
+    )
+    db.session.add(entry)
+
+
+def api_auth_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        token = _ensure_auth_header()
+        if not token:
+            return _error("Token Bearer requerido.", status=401, code="unauthorized")
+
+        # API Key authentication (generated from profile): rfk_...
+        if token.startswith("rfk_"):
+            key_hash = UserApiKey.hash_raw_key(token)
+            api_key = UserApiKey.query.filter_by(key_hash=key_hash).first()
+            if not api_key or api_key.revoked_at is not None:
+                return _error("API key invalida o revocada.", status=401, code="invalid_api_key")
+
+            user = db.session.get(User, api_key.user_id)
+            if not user or not user.is_active:
+                return _error("Usuario no autorizado.", status=401, code="unauthorized")
+            if user.company_id != api_key.company_id:
+                return _error("API key invalida para la empresa del usuario.", status=401, code="invalid_api_key")
+
+            api_key.last_used_at = datetime.utcnow()
+            db.session.commit()
+
+            g.api_user = user
+            g.auth_type = "api_key"
+            g.api_key_id = str(api_key.id)
+            return view_func(*args, **kwargs)
+
+        try:
+            payload = jwt.decode(
+                token,
+                current_app.config["SECRET_KEY"],
+                algorithms=["HS256"],
+            )
+        except jwt.ExpiredSignatureError:
+            return _error("Token expirado.", status=401, code="token_expired")
+        except jwt.InvalidTokenError:
+            return _error("Token invalido.", status=401, code="invalid_token")
+
+        user_id = _uuid_or_none(payload.get("sub"))
+        if user_id is None:
+            return _error("Token invalido.", status=401, code="invalid_token")
+
+        user = db.session.get(User, user_id)
+        if not user or not user.is_active:
+            return _error("Usuario no autorizado.", status=401, code="unauthorized")
+
+        g.api_user = user
+        g.token_payload = payload
+        g.auth_type = "jwt"
+        return view_func(*args, **kwargs)
+
+    return wrapped
+
+
+@api_bp.route("/health", methods=["GET"])
+def health():
+    return _ok({"status": "ok", "service": "rinde-api"})
+
+
+@api_bp.route("/auth/token", methods=["POST"])
+def create_token():
+    data = _data_dict()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if not email or not password:
+        return _error("Debes enviar email y password.", status=400, code="validation_error")
+
+    user = User.query.filter(func.lower(User.email) == email).first()
+    if not user or not user.check_password(password):
+        return _error("Credenciales invalidas.", status=401, code="invalid_credentials")
+
+    if not user.is_active:
+        return _error("Usuario inactivo.", status=403, code="inactive_user")
+
+    now = datetime.now(timezone.utc)
+    expires_in_seconds = 60 * 60 * 12
+    payload = {
+        "sub": str(user.id),
+        "company_id": str(user.company_id),
+        "role": user.role,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
+    }
+    token = jwt.encode(payload, current_app.config["SECRET_KEY"], algorithm="HS256")
+
+    return _ok(
+        {
+            "access_token": token,
+            "token_type": "Bearer",
+            "expires_in": expires_in_seconds,
+            "user": _serialize_user(user),
+        }
+    )
+
+
+@api_bp.route("/me", methods=["GET"])
+@api_auth_required
+def me():
+    return _ok(_serialize_user(g.api_user))
+
+
+@api_bp.route("/categories", methods=["GET"])
+@api_auth_required
+def categories_list():
+    categories = Category.query.filter_by(company_id=g.api_user.company_id, is_active=True).order_by(Category.name.asc()).all()
+    return _ok([
+        {
+            "id": str(category.id),
+            "name": category.name,
+            "icon": category.icon,
+            "account_code": category.account_code,
+        }
+        for category in categories
+    ])
+
+
+@api_bp.route("/expenses/analyze", methods=["POST"])
+@api_auth_required
+def analyze_expense_receipt():
+    if "receipt" not in request.files:
+        return _error("Debes adjuntar el archivo 'receipt'.", status=400, code="validation_error")
+
+    file_storage = request.files["receipt"]
+    if not file_storage or not file_storage.filename:
+        return _error("Debes seleccionar una imagen o PDF.", status=400, code="validation_error")
+
+    ext = os.path.splitext(file_storage.filename)[1].lower()
+    if ext not in ALLOWED_RECEIPT_EXTENSIONS:
+        return _error(
+            "Formato de comprobante no permitido. Usa PNG, JPG, JPEG, WEBP o PDF.",
+            status=415,
+            code="unsupported_media_type",
+        )
+
+    extracted = _extract_receipt_data_from_file(file_storage, g.api_user)
+    if not extracted:
+        return _error(
+            "No se detectaron datos utiles en el comprobante.",
+            status=422,
+            code="ocr_no_data",
+        )
+
+    return _ok({"extracted": extracted})
+
+
+@api_bp.route("/expenses", methods=["GET"])
+@api_auth_required
+def expenses_list():
+    user = g.api_user
+    limit = request.args.get("limit", default=20, type=int) or 20
+    offset = request.args.get("offset", default=0, type=int) or 0
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    query = Expense.query.options(selectinload(Expense.category)).order_by(Expense.created_at.desc())
+
+    if _is_admin_like(user):
+        query = query.filter(Expense.company_id == user.company_id)
+    else:
+        query = query.filter(Expense.user_id == user.id)
+
+    status_filter = request.args.get("status")
+    if status_filter:
+        query = query.filter(Expense.status == status_filter)
+
+    report_id = _uuid_or_none(request.args.get("report_id"))
+    if report_id:
+        query = query.filter(Expense.report_id == report_id)
+
+    total = query.count()
+    expenses = query.offset(offset).limit(limit).all()
+
+    return _ok(
+        {
+            "items": [_serialize_expense(expense) for expense in expenses],
+            "pagination": {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            },
+        }
+    )
+
+
+@api_bp.route("/expenses", methods=["POST"])
+@api_auth_required
+def expenses_create():
+    user = g.api_user
+    data = _data_dict()
+
+    analyze_receipt = str(data.get("analyze_receipt", "true")).lower() in {"1", "true", "yes", "on"}
+
+    amount = _parse_amount(data.get("amount"))
+    merchant = (data.get("merchant") or "").strip() or None
+    client_partner = (data.get("client_partner") or "").strip() or None
+    description = (data.get("description") or "").strip()
+    date_value = _parse_date(data.get("date"))
+    category_id = _uuid_or_none(data.get("category_id"))
+    ocr_data = None
+
+    receipt_file = request.files.get("receipt")
+    receipt_path = None
+    receipt_url = None
+
+    if receipt_file and receipt_file.filename:
+        receipt_path, receipt_url, file_error = _save_receipt(receipt_file, user.company_id)
+        if file_error:
+            return file_error
+
+        if analyze_receipt:
+            ocr_data = extract_expense_data(receipt_path) or {}
+            if ocr_data:
+                if amount is None and ocr_data.get("amount") is not None:
+                    amount = _parse_amount(ocr_data.get("amount"))
+
+                if not merchant:
+                    merchant = (ocr_data.get("merchant") or "").strip() or None
+
+                if not date_value:
+                    date_value = _parse_date(ocr_data.get("date"))
+
+                if category_id is None and ocr_data.get("category"):
+                    found_category = Category.query.filter(
+                        Category.company_id == user.company_id,
+                        Category.name.ilike(f"%{ocr_data['category']}%"),
+                    ).first()
+                    if found_category:
+                        category_id = found_category.id
+
+    if amount is None or amount <= 0:
+        return _error("Monto invalido. Envia 'amount' o una boleta legible para OCR.", status=422, code="validation_error")
+
+    if not date_value:
+        return _error("Fecha invalida. Usa formato YYYY-MM-DD.", status=422, code="validation_error")
+
+    if not description:
+        description = "Rendicion enviada por API"
+
+    if len(description) < 15:
+        return _error("La descripcion debe tener al menos 15 caracteres.", status=422, code="validation_error")
+
+    if category_id is not None:
+        category = Category.query.filter_by(id=category_id, company_id=user.company_id).first()
+        if not category:
+            return _error("Categoria invalida para esta empresa.", status=422, code="validation_error")
+
+    try:
+        expense = Expense(
+            user_id=user.id,
+            company_id=user.company_id,
+            amount=amount,
+            merchant=merchant,
+            client_partner=client_partner,
+            date=date_value,
+            category_id=category_id,
+            description=description,
+            status=ExpenseStatus.DRAFT,
+            receipt_url=receipt_url,
+            ocr_raw_data=ocr_data,
+        )
+
+        db.session.add(expense)
+        db.session.flush()
+
+        _append_duplicate_flags(expense)
+        warnings = _policy_warnings_for_expense(expense)
+
+        _audit(
+            user,
+            action="api_expense_created",
+            entity_type="expense",
+            entity_id=expense.id,
+            description=f"Gasto creado via API por {_decimal_as_text(expense.amount)} {expense.currency}",
+        )
+
+        db.session.commit()
+
+        return _ok(
+            {
+                "expense": _serialize_expense(expense),
+                "warnings": warnings,
+                "ocr": {"applied": bool(ocr_data), "raw": ocr_data},
+            },
+            status=201,
+        )
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error creando gasto via API: %s", exc)
+        return _error("No se pudo crear el gasto.", status=500, code="server_error")
+
+
+@api_bp.route("/reports", methods=["GET"])
+@api_auth_required
+def reports_list():
+    user = g.api_user
+    limit = request.args.get("limit", default=20, type=int) or 20
+    offset = request.args.get("offset", default=0, type=int) or 0
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    query = Report.query.options(joinedload(Report.user)).order_by(Report.created_at.desc())
+    if _is_admin_like(user):
+        query = query.filter(Report.company_id == user.company_id)
+    else:
+        query = query.filter(Report.user_id == user.id)
+
+    status_filter = request.args.get("status")
+    if status_filter:
+        query = query.filter(Report.status == status_filter)
+
+    total = query.count()
+    reports = query.offset(offset).limit(limit).all()
+
+    report_ids = [report.id for report in reports]
+    expense_counts = {}
+    if report_ids:
+        expense_counts = {
+            report_id: count
+            for report_id, count in db.session.query(Expense.report_id, func.count(Expense.id))
+            .filter(Expense.report_id.in_(report_ids))
+            .group_by(Expense.report_id)
+            .all()
+        }
+
+    return _ok(
+        {
+            "items": [
+                _serialize_report(report, expense_count=expense_counts.get(report.id, 0))
+                for report in reports
+            ],
+            "pagination": {
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            },
+        }
+    )
+
+
+@api_bp.route("/reports", methods=["POST"])
+@api_auth_required
+def reports_create():
+    user = g.api_user
+    data = _data_dict()
+
+    title = (data.get("title") or "").strip()
+    description = (data.get("description") or "").strip() or None
+
+    if request.is_json:
+        expense_ids_raw = (request.get_json(silent=True) or {}).get("expense_ids") or []
+    else:
+        expense_ids_raw = request.form.getlist("expense_ids")
+        if not expense_ids_raw and data.get("expense_ids"):
+            expense_ids_raw = [item.strip() for item in str(data.get("expense_ids")).split(",") if item.strip()]
+
+    if not title:
+        return _error("Debes enviar 'title'.", status=422, code="validation_error")
+
+    if not expense_ids_raw:
+        return _error("Debes enviar al menos un expense_id.", status=422, code="validation_error")
+
+    expense_ids = []
+    for raw_id in expense_ids_raw:
+        parsed = _uuid_or_none(raw_id)
+        if parsed:
+            expense_ids.append(parsed)
+
+    if not expense_ids:
+        return _error("No se recibieron expense_ids validos.", status=422, code="validation_error")
+
+    expenses = (
+        Expense.query.filter(
+            Expense.id.in_(expense_ids),
+            Expense.user_id == user.id,
+            Expense.report_id.is_(None),
+            Expense.status.in_([ExpenseStatus.DRAFT, ExpenseStatus.REJECTED]),
+        )
+        .order_by(Expense.created_at.asc())
+        .all()
+    )
+
+    if not expenses:
+        return _error("No se encontraron gastos elegibles para rendicion.", status=422, code="validation_error")
+
+    try:
+        report = Report(
+            company_id=user.company_id,
+            user_id=user.id,
+            title=title,
+            description=description,
+            status=ReportStatus.DRAFT,
+        )
+        db.session.add(report)
+        db.session.flush()
+
+        total = Decimal("0")
+        for expense in expenses:
+            expense.report_id = report.id
+            total += Decimal(str(expense.amount))
+
+        report.total_amount = total
+
+        _audit(
+            user,
+            action="api_report_created",
+            entity_type="report",
+            entity_id=report.id,
+            description=f"Rendicion creada via API con {len(expenses)} gastos",
+        )
+
+        db.session.commit()
+
+        return _ok({"report": _serialize_report(report, expense_count=len(expenses))}, status=201)
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error creando rendicion via API: %s", exc)
+        return _error("No se pudo crear la rendicion.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/pending-approvals", methods=["GET"])
+@api_auth_required
+def reports_pending_approvals():
+    user = g.api_user
+    reports = (
+        Report.query.options(joinedload(Report.user))
+        .filter(Report.company_id == user.company_id, Report.status.in_(list(REVIEW_STATUSES)))
+        .order_by(Report.created_at.desc())
+        .all()
+    )
+
+    actionable = []
+    for report in reports:
+        step = _current_step(report)
+        if _user_can_review_step(user, report, step):
+            actionable.append(
+                {
+                    **_serialize_report(report),
+                    "current_step_detail": {
+                        "step_number": step.step_number if step else None,
+                        "approver_type": step.approver_type if step else None,
+                        "approver_target": step.approver_target if step else None,
+                    },
+                }
+            )
+
+    return _ok({"items": actionable, "total": len(actionable)})
+
+
+@api_bp.route("/reports/<uuid:report_id>", methods=["GET"])
+@api_auth_required
+def reports_detail(report_id):
+    user = g.api_user
+    report = (
+        Report.query.options(
+            joinedload(Report.user),
+            joinedload(Report.approval_flow).selectinload(ApprovalFlow.steps),
+            selectinload(Report.decisions).joinedload(ApprovalDecision.user),
+        )
+        .filter(Report.id == report_id)
+        .first()
+    )
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if report.company_id != user.company_id:
+        return _error("No tienes permisos para ver esta rendicion.", status=403, code="forbidden")
+
+    if not _is_admin_like(user) and report.user_id != user.id:
+        return _error("No tienes permisos para ver esta rendicion.", status=403, code="forbidden")
+
+    return _ok(
+        {
+            "report": _serialize_report(report, include_expenses=True, include_decisions=True),
+        }
+    )
+
+
+@api_bp.route("/reports/<uuid:report_id>/submit", methods=["POST"])
+@api_auth_required
+def reports_submit(report_id):
+    user = g.api_user
+    report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if report.company_id != user.company_id:
+        return _error("No tienes permisos para enviar esta rendicion.", status=403, code="forbidden")
+
+    if report.user_id != user.id and not _is_admin_like(user):
+        return _error("Solo el solicitante o admin puede enviar esta rendicion.", status=403, code="forbidden")
+
+    if report.status != ReportStatus.DRAFT:
+        return _error("Solo se pueden enviar rendiciones en borrador.", status=409, code="invalid_state")
+
+    try:
+        selected_flow = _select_approval_flow(report.company_id, report.total_amount)
+        if not selected_flow or not selected_flow.steps:
+            report.status = ReportStatus.APPROVED
+            report.approved_at = datetime.utcnow()
+            for expense in report.expenses:
+                expense.status = ExpenseStatus.APPROVED
+            action_msg = "Rendicion aprobada automaticamente (sin flujo activo)."
+        else:
+            report.approval_flow_id = selected_flow.id
+            report.current_step = 1
+            report.status = ReportStatus.UNDER_REVIEW
+            report.submitted_at = datetime.utcnow()
+
+            for expense in report.expenses:
+                expense.status = ExpenseStatus.SUBMITTED
+
+            step = selected_flow.steps[0]
+            _notify_step_if_needed(report, step)
+            action_msg = f"Rendicion enviada a flujo '{selected_flow.name}'."
+
+        _audit(
+            user,
+            action="api_report_submitted",
+            entity_type="report",
+            entity_id=report.id,
+            description=action_msg,
+        )
+
+        db.session.commit()
+
+        return _ok({"message": action_msg, "report": _serialize_report(report)})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error enviando rendicion via API: %s", exc)
+        return _error("No se pudo enviar la rendicion.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>/approve", methods=["POST"])
+@api_auth_required
+def reports_approve(report_id):
+    user = g.api_user
+    data = _data_dict()
+    comment = (data.get("comment") or "").strip()
+
+    report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if report.company_id != user.company_id:
+        return _error("No tienes permisos para aprobar esta rendicion.", status=403, code="forbidden")
+
+    if report.status in {ReportStatus.APPROVED, ReportStatus.REJECTED, ReportStatus.PAID}:
+        return _error("La rendicion ya fue resuelta.", status=409, code="invalid_state")
+
+    if not report.approval_flow_id:
+        if not _is_admin_like(user):
+            return _error("No tienes permisos para aprobar esta rendicion.", status=403, code="forbidden")
+
+        try:
+            report.status = ReportStatus.APPROVED
+            report.approved_at = datetime.utcnow()
+            for expense in report.expenses:
+                expense.status = ExpenseStatus.APPROVED
+
+            _audit(
+                user,
+                action="api_report_approved",
+                entity_type="report",
+                entity_id=report.id,
+                description="Rendicion aprobada sin flujo.",
+            )
+            db.session.commit()
+            notify_report_approved(report)
+            return _ok({"message": "Rendicion aprobada.", "report": _serialize_report(report)})
+        except Exception as exc:
+            db.session.rollback()
+            current_app.logger.error("Error aprobando rendicion via API: %s", exc)
+            return _error("No se pudo aprobar la rendicion.", status=500, code="server_error")
+
+    step = _current_step(report)
+    if not _user_can_review_step(user, report, step):
+        return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
+
+    existing = ApprovalDecision.query.filter_by(
+        report_id=report.id,
+        user_id=user.id,
+        step_number=report.current_step,
+        decision="approved",
+    ).first()
+    if existing:
+        return _ok({"message": "Aprobacion ya registrada previamente.", "report": _serialize_report(report)})
+
+    try:
+        decision = ApprovalDecision(
+            report_id=report.id,
+            user_id=user.id,
+            step_number=report.current_step,
+            decision="approved",
+            comments=comment,
+        )
+        db.session.add(decision)
+
+        next_step = ApprovalStep.query.filter_by(
+            flow_id=report.approval_flow_id,
+            step_number=report.current_step + 1,
+        ).first()
+
+        if next_step:
+            report.current_step += 1
+            report.status = ReportStatus.UNDER_REVIEW
+            _notify_step_if_needed(report, next_step)
+            message = "Paso aprobado. Se notifico al siguiente aprobador."
+        else:
+            report.status = ReportStatus.APPROVED
+            report.approved_at = datetime.utcnow()
+            for expense in report.expenses:
+                expense.status = ExpenseStatus.APPROVED
+            notify_report_approved(report)
+            message = "Aprobacion final completada."
+
+        _audit(
+            user,
+            action="api_report_approved",
+            entity_type="report",
+            entity_id=report.id,
+            description=message,
+            changes={"step": report.current_step},
+        )
+        db.session.commit()
+
+        return _ok({"message": message, "report": _serialize_report(report)})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error aprobando paso via API: %s", exc)
+        return _error("No se pudo aprobar la rendicion.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>/reject", methods=["POST"])
+@api_auth_required
+def reports_reject(report_id):
+    user = g.api_user
+    data = _data_dict()
+    reason = (data.get("reason") or data.get("comment") or "").strip()
+
+    if not reason:
+        return _error("Debes enviar un motivo de rechazo en 'reason'.", status=422, code="validation_error")
+
+    report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if report.company_id != user.company_id:
+        return _error("No tienes permisos para rechazar esta rendicion.", status=403, code="forbidden")
+
+    if report.status in {ReportStatus.APPROVED, ReportStatus.REJECTED, ReportStatus.PAID}:
+        return _error("La rendicion ya fue resuelta.", status=409, code="invalid_state")
+
+    if report.approval_flow_id:
+        step = _current_step(report)
+        if not _user_can_review_step(user, report, step):
+            return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
+    elif not _is_admin_like(user):
+        return _error("No tienes permisos para rechazar esta rendicion.", status=403, code="forbidden")
+
+    existing = ApprovalDecision.query.filter_by(
+        report_id=report.id,
+        user_id=user.id,
+        step_number=report.current_step,
+        decision="rejected",
+    ).first()
+    if existing:
+        return _ok({"message": "Rechazo ya registrado previamente.", "report": _serialize_report(report)})
+
+    try:
+        decision = ApprovalDecision(
+            report_id=report.id,
+            user_id=user.id,
+            step_number=report.current_step,
+            decision="rejected",
+            comments=reason,
+        )
+        db.session.add(decision)
+
+        report.status = ReportStatus.REJECTED
+        for expense in report.expenses:
+            expense.status = ExpenseStatus.REJECTED
+
+        notify_report_rejected(report, reason)
+
+        _audit(
+            user,
+            action="api_report_rejected",
+            entity_type="report",
+            entity_id=report.id,
+            description=f"Rendicion rechazada: {reason}",
+        )
+
+        db.session.commit()
+
+        return _ok({"message": "Rendicion rechazada.", "report": _serialize_report(report)})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error rechazando rendicion via API: %s", exc)
+        return _error("No se pudo rechazar la rendicion.", status=500, code="server_error")

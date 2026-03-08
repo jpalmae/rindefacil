@@ -8,6 +8,7 @@ from app.models.policy import Policy
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
 from app.models.notification import Notification
 from app.models.audit import AuditLog
+from app.models.api_key import UserApiKey
 
 # Para facilitar la exposición
 __all__ = [
@@ -26,5 +27,6 @@ __all__ = [
     'ApprovalStep',
     'ApprovalDecision',
     'Notification',
-    'AuditLog'
+    'AuditLog',
+    'UserApiKey'
 ]
