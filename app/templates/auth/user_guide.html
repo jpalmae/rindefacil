@@ -26,7 +26,20 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">2. Crear un gasto correctamente</h2>
+        <h2 class="text-xl font-bold text-gray-900">2. Conceptos clave: gasto, rendición y aprobación</h2>
+        <div class="space-y-3 text-gray-700">
+            <p><strong>Gasto:</strong> es el comprobante individual. Cada boleta, ticket o factura se registra como un gasto separado.</p>
+            <p><strong>Rendición:</strong> es la agrupación de uno o más gastos. Tiene título, descripción, total y estado propio.</p>
+            <p><strong>Flujo de aprobación:</strong> no se ejecuta sobre el gasto individual. Se ejecuta cuando envías la rendición.</p>
+            <p><strong>Secuencia correcta:</strong> primero creas gastos, después armas la rendición y recién entonces la envías a aprobación.</p>
+        </div>
+        <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
+            <p><strong>Importante:</strong> si no existe un flujo activo configurado para tu empresa, la rendición no se envía y se mantiene en borrador.</p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">3. Crear un gasto correctamente</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Mis Gastos -> + Nuevo Gasto</code>.</p>
             <p><strong>Campos obligatorios:</strong> monto, comercio, fecha, motivo y GPS activo.</p>
@@ -42,7 +55,7 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">3. Cómo funciona la validación antifraude</h2>
+        <h2 class="text-xl font-bold text-gray-900">4. Cómo funciona la validación antifraude</h2>
         <p class="text-gray-700">
             Cada gasto obtiene una validación <strong>Coherente</strong>, <strong>Parcial</strong> o
             <strong>Riesgo</strong>. Se calcula con:
@@ -60,16 +73,18 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">4. Crear y enviar una rendición</h2>
+        <h2 class="text-xl font-bold text-gray-900">5. Crear y enviar una rendición</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Rendiciones -> Nueva Rendición</code>.</p>
-            <p>Selecciona gastos en borrador, define título/descripcion y crea la rendición.</p>
-            <p>Cuando esté lista, envíala al flujo de aprobación para revisión de jefatura/administración.</p>
+            <p>Selecciona gastos en borrador, define título/descripción y crea la rendición.</p>
+            <p>Al crearla, la rendición aún no está aprobada ni enviada. Queda en <strong>borrador</strong>.</p>
+            <p>Cuando esté lista, usa <strong>Enviar Rendición</strong>. En ese momento el sistema busca el flujo aplicable y la deriva a revisión.</p>
+            <p>Si no existe un flujo activo, la rendición no se envía y debes esperar a que administración configure uno.</p>
         </div>
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">5. Roles y perfiles</h2>
+        <h2 class="text-xl font-bold text-gray-900">6. Roles y perfiles</h2>
         <p class="text-gray-700">
             El acceso a menús y acciones depende del rol asignado al usuario.
         </p>
@@ -104,11 +119,14 @@
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">6. Flujos de aprobación</h2>
+        <h2 class="text-xl font-bold text-gray-900">7. Flujos de aprobación</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Admin -> Flujos</code>.</p>
             <p>
                 Cada flujo puede activarse según reglas (por ejemplo monto mínimo) y se compone de pasos secuenciales.
+            </p>
+            <p>
+                El sistema evalúa el flujo cuando el usuario envía la rendición. Si hay varios flujos, selecciona el primero que cumpla la regla configurada.
             </p>
             <p><strong>Tipos de aprobador por paso:</strong></p>
             <ul class="list-disc pl-6 space-y-1">
@@ -117,13 +135,13 @@
                 <li><code>manager</code>: aprueba el jefe directo del solicitante.</li>
             </ul>
             <p>
-                Al enviar una rendición, el sistema selecciona el flujo aplicable y notifica al aprobador del paso actual.
+                Al enviar una rendición, el sistema selecciona el flujo aplicable, mueve la rendición a revisión y notifica al aprobador del paso actual.
             </p>
         </div>
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">7. Administración (Admin/Superadmin)</h2>
+        <h2 class="text-xl font-bold text-gray-900">8. Administración (Admin/Superadmin)</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Admin</code>.</p>
             <ul class="list-disc pl-6 space-y-1">
@@ -133,21 +151,25 @@
                 <li><strong>Branding:</strong> nombre de app, ícono, logo y dominio por defecto de usuarios.</li>
                 <li><strong>Auditoría:</strong> trazabilidad de acciones administrativas y operativas.</li>
             </ul>
+            <p>Antes de habilitar usuarios finales, conviene configurar al menos un flujo de aprobación. Sin flujo, las rendiciones no se enviarán.</p>
         </div>
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">8. Estados y alertas</h2>
+        <h2 class="text-xl font-bold text-gray-900">9. Estados y alertas</h2>
         <ul class="list-disc pl-6 space-y-2 text-gray-700">
             <li><strong>Borrador:</strong> gasto creado, aún no enviado en rendición.</li>
             <li><strong>Enviado:</strong> está dentro de una rendición en proceso de aprobación.</li>
             <li><strong>Aprobado / Rechazado:</strong> resultado del flujo.</li>
             <li><strong>Advertencias:</strong> pueden aparecer por duplicados, políticas o score antifraude.</li>
         </ul>
+        <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
+            <p><strong>Diferencia importante:</strong> un gasto puede estar en borrador aunque la rendición todavía no exista. La aprobación siempre se ve en la rendición.</p>
+        </div>
     </div>
 
     <div class="card space-y-4">
-        <h2 class="text-xl font-bold text-gray-900">9. API Keys para agentes IA</h2>
+        <h2 class="text-xl font-bold text-gray-900">10. API Keys para agentes IA</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Mi Perfil -> API Keys para Agentes IA</code>.</p>
             <p>
@@ -163,7 +185,7 @@
     </div>
 
     <div class="card space-y-3">
-        <h2 class="text-xl font-bold text-gray-900">10. Buenas prácticas para evitar rechazos</h2>
+        <h2 class="text-xl font-bold text-gray-900">11. Buenas prácticas para evitar rechazos</h2>
         <ul class="list-disc pl-6 space-y-2 text-gray-700">
             <li>Rinde apenas ocurre el gasto (mejor score y mejor trazabilidad).</li>
             <li>No edites manualmente comercio/fecha/hora si la boleta ya fue leída correctamente.</li>

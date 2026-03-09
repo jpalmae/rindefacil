@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Informe: {{ report.title }} - {{ brand_app_name }}{% endblock %}
+{% block title %}Rendición: {{ report.title }} - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
 <div class="py-4 max-w-5xl mx-auto">
@@ -41,7 +41,7 @@
             {% if report.status == 'draft' and current_user.id == report.user_id %}
             <form action="{{ url_for('reports.submit', id=report.id) }}" method="POST" class="w-full">
                 <button type="submit" class="btn-primary w-full shadow-lg shadow-primary/20">
-                    <span class="i-heroicons-paper-airplane mr-2"></span> Enviar a Aprobación
+                    <span class="i-heroicons-paper-airplane mr-2"></span> Enviar Rendición
                 </button>
             </form>
             {% endif %}

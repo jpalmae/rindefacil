@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}Informes de Rendición - {{ brand_app_name }}{% endblock %}
+{% block title %}Rendiciones - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
 <div class="py-4">
     <div class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">Mis Informes</h1>
+            <h1 class="text-2xl font-bold text-gray-900">Mis Rendiciones</h1>
             <p class="text-gray-500">Agrupa tus gastos y envíalos a aprobación</p>
         </div>
         <a href="{{ url_for('reports.new') }}" class="btn-primary">
-            + Nuevo Informe
+            + Nueva Rendición
         </a>
     </div>
 
@@ -57,8 +57,8 @@
                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                 {% if report.status == 'draft' %}
                                 <span class="badge-yellow">Borrador</span>
-                                {% elif report.status == 'submitted' %}
-                                <span class="badge bg-blue-100 text-blue-800">Enviado</span>
+                                {% elif report.status in ['submitted', 'in_review', 'under_review'] %}
+                                <span class="badge bg-blue-100 text-blue-800">En revisión</span>
                                 {% elif report.status == 'approved' %}
                                 <span class="badge-green">Aprobado</span>
                                 {% else %}
@@ -92,6 +92,8 @@
                             <span class="badge-green !text-[10px] !px-2 !py-0.5">Aprobado</span>
                             {% elif report.status == 'rejected' %}
                             <span class="badge-red !text-[10px] !px-2 !py-0.5">Rechazado</span>
+                            {% elif report.status in ['submitted', 'in_review', 'under_review'] %}
+                            <span class="badge bg-blue-100 text-blue-800 !text-[10px] !px-2 !py-0.5">En revisión</span>
                             {% else %}
                             <span class="badge bg-blue-100 text-blue-800 !text-[10px] !px-2 !py-0.5">{{ report.status
                                 }}</span>
@@ -116,7 +118,7 @@
         {% else %}
         <div class="text-center py-12">
             <span class="i-heroicons-document-duplicate text-gray-300 text-6xl mb-4 block"></span>
-            <p class="text-gray-500 mb-4">No has agrupado gastos en ningún informe aún.</p>
+            <p class="text-gray-500 mb-4">No has creado ninguna rendición aún.</p>
             <a href="{{ url_for('reports.new') }}" class="btn-outline">Agrupar gastos</a>
         </div>
         {% endif %}

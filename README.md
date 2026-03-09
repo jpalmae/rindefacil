@@ -1,6 +1,6 @@
 # Rinde Fácil
 
-Aplicación web para rendición de gastos empresariales: registro de gastos, análisis de boletas con IA (OCR), creación de informes, flujos de aprobación, notificaciones y branding por empresa.
+Aplicación web para rendición de gastos empresariales: registro de gastos, análisis de boletas con IA (OCR), creación de rendiciones, flujos de aprobación, notificaciones y branding por empresa.
 
 ## Funcionalidades principales
 
@@ -12,7 +12,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Validación antifraude con score combinado (`match`, `partial`, `mismatch`):
   comercio↔ubicación + fecha boleta↔rendición + hora boleta↔rendición (margen 20 min).
   Incluye además regla horaria habitual: L-V entre 09:00 y 19:00.
-- Informes de rendición con múltiples gastos.
+- Rendiciones con múltiples gastos.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
@@ -165,6 +165,26 @@ Incluye:
 - Buenas prácticas para evitar rechazos.
 - Uso de API Keys para agentes IA.
 
+## Modelo operativo
+
+La aplicación separa tres conceptos:
+
+- `Gasto`: comprobante individual. Se crea desde `Gastos -> Nuevo Gasto`.
+- `Rendición`: agrupación de uno o más gastos. Internamente el modelo se llama `Report`, pero en la UI corresponde a una rendición.
+- `Flujo de aprobación`: se ejecuta sobre la rendición, no sobre el gasto individual.
+
+Secuencia normal de uso:
+
+1. Crear uno o varios gastos.
+2. Ir a `Rendiciones` y agrupar esos gastos.
+3. Crear la rendición en estado borrador.
+4. Enviar la rendición al flujo de aprobación.
+
+Importante:
+
+- Si no existe un flujo activo con pasos configurados para la empresa, la rendición no se envía y se mantiene en borrador.
+- Los gastos individuales no se aprueban por separado; el resultado final se refleja en la rendición y en los gastos asociados.
+
 ## Roles y perfiles
 
 Roles disponibles:
@@ -188,6 +208,12 @@ Cada flujo permite:
   - `role` (rol específico),
   - `user` (usuario específico),
   - `manager` (jefe directo del solicitante).
+
+Notas operativas:
+
+- El flujo se evalúa al enviar la rendición.
+- Si el flujo no tiene pasos o no existe uno aplicable, la rendición permanece en borrador.
+- La aprobación afecta a la rendición y actualiza el estado de los gastos que contiene.
 
 ### Administración
 

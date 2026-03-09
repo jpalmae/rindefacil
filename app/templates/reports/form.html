@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Nuevo Informe - {{ brand_app_name }}{% endblock %}
+{% block title %}Nueva Rendición - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
 <div class="py-4 max-w-4xl mx-auto">
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Agrupar Gastos en Informe</h1>
+        <h1 class="text-2xl font-bold text-gray-900">Crear Rendición</h1>
         <p class="text-gray-500">Selecciona los gastos que deseas rendir juntos.</p>
     </div>
 
@@ -14,7 +14,7 @@
         <span class="i-heroicons-receipt-refund text-gray-300 text-6xl mb-4 block"></span>
         <p class="text-gray-600 font-medium text-lg mb-2">No tienes gastos rendibles disponibles.</p>
         <p class="text-gray-500 mb-6 text-sm">Solo puedes agrupar gastos que estén en estado Borrador o Rechazado y no
-            pertenezcan a otro informe.</p>
+            pertenezcan a otra rendición.</p>
         <a href="{{ url_for('expenses.new') }}" class="btn-primary inline-flex">Crear Nuevo Gasto</a>
     </div>
     {% else %}
@@ -31,14 +31,14 @@
     }">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-            <!-- Left Side: Report Details -->
+            <!-- Left Side: Rendition Details -->
             <div class="lg:col-span-1 space-y-6">
                 <div class="card sticky top-24">
-                    <h3 class="text-lg font-bold text-gray-900 mb-4">Detalles del Informe</h3>
+                    <h3 class="text-lg font-bold text-gray-900 mb-4">Detalles de la Rendición</h3>
 
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Título del Informe *</label>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Título de la Rendición *</label>
                             <input type="text" name="title" class="input" placeholder="Ej. Viaje a Santiago Mar/24"
                                 required>
                         </div>
@@ -54,14 +54,14 @@
                                 <span class="font-bold text-gray-900" x-text="selectedExpenses.length"></span>
                             </div>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="text-gray-700 font-medium">Total Informe:</span>
+                                <span class="text-gray-700 font-medium">Total Rendición:</span>
                                 <span class="text-2xl font-black text-primary">$<span
                                         x-text="total.toLocaleString('es-CL')"></span></span>
                             </div>
                         </div>
 
                         <button type="submit" class="btn-primary w-full mt-4" :disabled="selectedExpenses.length === 0">
-                            Crear Informe
+                            Crear Rendición
                         </button>
                     </div>
                 </div>
