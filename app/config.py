@@ -29,6 +29,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@sixmanager.local')
     APP_NAME = os.environ.get('APP_NAME', 'Rinde Fácil')
     APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
+    TEMP_PASSWORD = os.environ.get('TEMP_PASSWORD', 'Sixman123.,')
 
 
 class DevelopmentConfig(Config):

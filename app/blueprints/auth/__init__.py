@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from app.extensions import db
@@ -9,6 +9,26 @@ from app.models.user import User, UserRole
 from app.models.api_key import UserApiKey
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _temporary_password_value():
+    return (current_app.config.get('TEMP_PASSWORD') or 'Sixman123.,').strip()
+
+
+@auth_bp.before_app_request
+def enforce_temporary_password_change():
+    if not current_user.is_authenticated:
+        return None
+    if not session.get('must_change_password'):
+        return None
+
+    endpoint = request.endpoint or ''
+    if endpoint in {'auth.force_password_change', 'auth.logout'}:
+        return None
+    if endpoint.startswith('static'):
+        return None
+    return redirect(url_for('auth.force_password_change'))
+
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -23,7 +43,20 @@ def login():
         user = User.query.filter_by(email=email).first()
         
         if user and user.check_password(password):
+            if not user.is_active:
+                flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
+                return render_template('auth/login.html')
+
             login_user(user, remember=remember)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+
+            if password == _temporary_password_value():
+                session['must_change_password'] = True
+                flash('Debes cambiar tu contraseña temporal antes de continuar.', 'warning')
+                return redirect(url_for('auth.force_password_change'))
+
+            session.pop('must_change_password', None)
             flash('Sesión iniciada correctamente.', 'success')
             next_page = request.args.get('next')
             return redirect(next_page or url_for('dashboard.index'))
@@ -31,6 +64,40 @@ def login():
         flash('Email o contraseña incorrectos.', 'danger')
         
     return render_template('auth/login.html')
+
+
+@auth_bp.route('/force-password-change', methods=['GET', 'POST'])
+@login_required
+def force_password_change():
+    if not session.get('must_change_password'):
+        return redirect(url_for('dashboard.index'))
+
+    if request.method == 'POST':
+        current_password = request.form.get('current_password') or ''
+        new_password = request.form.get('new_password') or ''
+        confirm_password = request.form.get('confirm_password') or ''
+        temp_password = _temporary_password_value()
+
+        if not current_user.check_password(current_password):
+            flash('La contraseña temporal ingresada no es correcta.', 'danger')
+            return render_template('auth/force_password_change.html')
+        if not new_password:
+            flash('Debes ingresar una nueva contraseña.', 'danger')
+            return render_template('auth/force_password_change.html')
+        if new_password != confirm_password:
+            flash('La confirmación no coincide con la nueva contraseña.', 'danger')
+            return render_template('auth/force_password_change.html')
+        if new_password == temp_password:
+            flash('La nueva contraseña no puede ser la contraseña temporal.', 'danger')
+            return render_template('auth/force_password_change.html')
+
+        current_user.set_password(new_password)
+        db.session.commit()
+        session.pop('must_change_password', None)
+        flash('Contraseña actualizada correctamente.', 'success')
+        return redirect(url_for('dashboard.index'))
+
+    return render_template('auth/force_password_change.html')
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 def register():
