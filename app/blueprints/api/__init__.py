@@ -256,6 +256,7 @@ def _serialize_user(user):
 def _serialize_expense(expense):
     return {
         "id": str(expense.id),
+        "public_id": expense.public_id,
         "user_id": str(expense.user_id),
         "company_id": str(expense.company_id),
         "report_id": str(expense.report_id) if expense.report_id else None,
@@ -297,6 +298,7 @@ def _serialize_expense(expense):
 def _serialize_report(report, expense_count=None, include_expenses=False, include_decisions=False):
     data = {
         "id": str(report.id),
+        "public_id": report.public_id,
         "company_id": str(report.company_id),
         "user": {
             "id": str(report.user.id),

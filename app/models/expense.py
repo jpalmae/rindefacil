@@ -68,5 +68,9 @@ class Expense(db.Model):
     # Self reference for duplicates
     duplicate_of = db.relationship('Expense', remote_side=[id], backref='duplicated_by')
 
+    @property
+    def public_id(self):
+        return f"GST-{self.id.hex.upper()}"
+
     def __repr__(self):
         return f'<Expense {self.id} - {self.amount} {self.currency}>'

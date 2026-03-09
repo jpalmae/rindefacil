@@ -28,6 +28,7 @@
                     report.status }}</span>
                 {% endif %}
             </div>
+            <p class="text-gray-500 ml-8 text-sm">ID {{ report.public_id }}</p>
             <p class="text-gray-500 ml-8 text-sm">Creado por {{ report.user.full_name }} el {{
                 report.created_at.strftime('%d/%m/%Y') }}</p>
             {% if report.description %}
@@ -216,6 +217,7 @@
                                 }}</h4>
                             <div class="text-xs font-medium text-gray-500 mt-0.5">{{ expense.category.name if
                                 expense.category else 'General' }} • {{ expense.date.strftime('%d/%m/%Y') }}</div>
+                            <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
                         </div>
                     </div>
 

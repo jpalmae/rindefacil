@@ -45,5 +45,9 @@ class Report(db.Model):
     approval_flow = db.relationship('ApprovalFlow', back_populates='reports')
     decisions = db.relationship('ApprovalDecision', back_populates='report', cascade='all, delete-orphan', order_by='ApprovalDecision.decided_at.desc()')
 
+    @property
+    def public_id(self):
+        return f"RND-{self.id.hex.upper()}"
+
     def __repr__(self):
         return f'<Report {self.title}>'
