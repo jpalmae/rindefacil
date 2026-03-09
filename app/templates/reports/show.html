@@ -15,7 +15,7 @@
                 <h1 class="text-2xl font-bold text-gray-900">{{ report.title }}</h1>
                 {% if report.status == 'draft' %}
                 <span class="badge-yellow uppercase tracking-tighter text-[10px] px-2 py-0.5">Borrador</span>
-                {% elif report.status == 'in_review' %}
+                {% elif report.status in ['in_review', 'under_review'] %}
                 <span
                     class="badge bg-indigo-100 text-indigo-700 uppercase tracking-tighter text-[10px] px-2 py-0.5 border border-indigo-200">En
                     Revisión</span>
@@ -48,7 +48,7 @@
 
             <!-- Aprobadores: Botones Aprobar/Rechazar (Solo si toca en el flujo) -->
             {% set can_approve_now = false %}
-            {% if report.status == 'in_review' %}
+            {% if report.status in ['in_review', 'under_review'] %}
             {% if not report.approval_flow_id %}
             {% if current_user.has_role('admin') or current_user.has_role('manager') %}
             {% set can_approve_now = true %}
@@ -143,10 +143,10 @@
                 </div>
                 <div class="flex-1 text-center flex flex-col items-center">
                     <div
-                        class="w-2.5 h-2.5 rounded-full {{ 'bg-indigo-500' if report.status in ['in_review', 'approved'] else 'bg-gray-300' }} mb-1">
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-indigo-500' if report.status in ['in_review', 'under_review', 'approved'] else 'bg-gray-300' }} mb-1">
                     </div>
                     <span
-                        class="text-[9px] {{ 'text-indigo-500' if report.status in ['in_review', 'approved'] else 'text-gray-400' }}">Revisión</span>
+                        class="text-[9px] {{ 'text-indigo-500' if report.status in ['in_review', 'under_review', 'approved'] else 'text-gray-400' }}">Revisión</span>
                 </div>
                 <div class="flex-1 text-right flex flex-col items-end">
                     <div
@@ -171,7 +171,7 @@
                 {% for step in report.approval_flow.steps %}
                 <div class="flex-1 flex flex-col items-center">
                     {% set is_past = report.current_step > step.step_number or report.status == 'approved' %}
-                    {% set is_current = report.current_step == step.step_number and report.status == 'in_review' %}
+                    {% set is_current = report.current_step == step.step_number and report.status in ['in_review', 'under_review'] %}
                     <div
                         class="w-2.5 h-2.5 rounded-full {{ 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' if is_past else ('bg-indigo-500 ring-2 ring-indigo-200 animate-pulse' if is_current else 'bg-gray-200') }} mb-1">
                     </div>
