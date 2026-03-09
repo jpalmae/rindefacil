@@ -88,15 +88,20 @@
                         <td class="px-6 py-4 whitespace-nowrap text-right">
                             <div class="flex justify-end gap-2">
                                 <a href="{{ url_for('admin.user_edit', user_id=u.id) }}"
-                                    class="p-2 text-gray-400 hover:text-primary transition-colors inline-block">
-                                    <span class="i-heroicons-pencil-square text-lg"></span>
+                                    class="btn-outline !py-1.5 !px-3 !text-xs inline-flex items-center gap-1.5"
+                                    title="Editar usuario">
+                                    <span class="i-heroicons-pencil-square text-sm"></span>
+                                    Editar
                                 </a>
                                 {% if u.id != current_user.id %}
                                 <form action="{{ url_for('admin.user_delete', user_id=u.id) }}" method="POST"
                                     onsubmit="return confirm('¿Seguro que quieres eliminar este usuario?');"
                                     class="inline">
-                                    <button type="submit" class="p-2 text-gray-400 hover:text-danger transition-colors">
-                                        <span class="i-heroicons-trash text-lg"></span>
+                                    <button type="submit"
+                                        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger border border-danger/30 hover:bg-danger/10 transition-colors"
+                                        title="Eliminar usuario">
+                                        <span class="i-heroicons-trash text-sm"></span>
+                                        Eliminar
                                     </button>
                                 </form>
                                 {% endif %}
