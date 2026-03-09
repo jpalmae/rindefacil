@@ -57,7 +57,7 @@ def create_app(config_name=None):
         last_notifications = []
         brand_app_name = app.config.get('APP_NAME', 'Rinde Fácil')
         brand_logo_url = None
-        brand_icon_url = '/static/img/icon-192.png'
+        brand_icon_url = None
         brand_default_domain = ''
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
@@ -67,11 +67,7 @@ def create_app(config_name=None):
             company_settings = current_user.company.settings or {}
             brand_app_name = company_settings.get('brand_app_name') or brand_app_name
             brand_logo_url = company_settings.get('brand_logo_url') or None
-            brand_icon_url = (
-                company_settings.get('brand_icon_url')
-                or brand_logo_url
-                or brand_icon_url
-            )
+            brand_icon_url = company_settings.get('brand_icon_url') or None
             brand_default_domain = (
                 company_settings.get('brand_user_default_domain')
                 or company_settings.get('brand_default_domain')
