@@ -163,39 +163,34 @@ def submit(id):
                 selected_flow = flow
                 break
         
-        if not selected_flow:
-            # If no flow found, use a default fallback or approve immediately
-            # Let's assume there must be at least one flow. 
-            # If nothing, we fallback to the old behavior (single step)
-            report.status = ReportStatus.APPROVED
-            report.approved_at = datetime.utcnow()
-            for exp in report.expenses:
-                exp.status = ExpenseStatus.APPROVED
-            flash('Informe aprobado automáticamente (Sin flujo configurado).', 'success')
-        else:
-            report.approval_flow_id = selected_flow.id
-            report.current_step = 1 # Start at step 1
-            report.status = 'in_review' # Transition to in_review
-            report.submitted_at = datetime.utcnow()
+        if not selected_flow or not selected_flow.steps:
+            db.session.rollback()
+            flash('No existe un flujo de aprobación activo para esta rendición. El informe se mantiene en borrador hasta que un administrador configure uno.', 'warning')
+            return redirect(url_for('reports.show', id=id))
+
+        report.approval_flow_id = selected_flow.id
+        report.current_step = 1 # Start at step 1
+        report.status = ReportStatus.UNDER_REVIEW
+        report.submitted_at = datetime.utcnow()
+        
+        # Update underlying expenses
+        for exp in report.expenses:
+            exp.status = ExpenseStatus.SUBMITTED
             
-            # Update underlying expenses
-            for exp in report.expenses:
-                exp.status = ExpenseStatus.SUBMITTED
-                
-            # Notify potential approvers of Step 1
-            current_step_obj = selected_flow.steps[0] if selected_flow.steps else None
-            if current_step_obj:
-                # Find users that match this step to notify
-                if current_step_obj.approver_type == 'role':
-                    potential_approvers = User.query.filter_by(company_id=current_user.company_id, role=current_step_obj.approver_target).all()
-                    for approver in potential_approvers:
-                        notify_approval_needed(approver.id, report)
-                elif current_step_obj.approver_type == 'user':
-                    notify_approval_needed(current_step_obj.approver_target, report)
-                elif current_step_obj.approver_type == 'manager' and report.user.manager_id:
-                    notify_approval_needed(report.user.manager_id, report)
-                
-            flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
+        # Notify potential approvers of Step 1
+        current_step_obj = selected_flow.steps[0] if selected_flow.steps else None
+        if current_step_obj:
+            # Find users that match this step to notify
+            if current_step_obj.approver_type == 'role':
+                potential_approvers = User.query.filter_by(company_id=current_user.company_id, role=current_step_obj.approver_target).all()
+                for approver in potential_approvers:
+                    notify_approval_needed(approver.id, report)
+            elif current_step_obj.approver_type == 'user':
+                notify_approval_needed(current_step_obj.approver_target, report)
+            elif current_step_obj.approver_type == 'manager' and report.user.manager_id:
+                notify_approval_needed(report.user.manager_id, report)
+            
+        flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
             
         db.session.commit()
         

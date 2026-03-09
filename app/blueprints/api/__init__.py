@@ -1097,23 +1097,24 @@ def reports_submit(report_id):
     try:
         selected_flow = _select_approval_flow(report.company_id, report.total_amount)
         if not selected_flow or not selected_flow.steps:
-            report.status = ReportStatus.APPROVED
-            report.approved_at = datetime.utcnow()
-            for expense in report.expenses:
-                expense.status = ExpenseStatus.APPROVED
-            action_msg = "Rendicion aprobada automaticamente (sin flujo activo)."
-        else:
-            report.approval_flow_id = selected_flow.id
-            report.current_step = 1
-            report.status = ReportStatus.UNDER_REVIEW
-            report.submitted_at = datetime.utcnow()
+            db.session.rollback()
+            return _error(
+                "No existe un flujo de aprobacion activo para esta rendicion. Se mantiene en borrador.",
+                status=409,
+                code="no_approval_flow",
+            )
 
-            for expense in report.expenses:
-                expense.status = ExpenseStatus.SUBMITTED
+        report.approval_flow_id = selected_flow.id
+        report.current_step = 1
+        report.status = ReportStatus.UNDER_REVIEW
+        report.submitted_at = datetime.utcnow()
 
-            step = selected_flow.steps[0]
-            _notify_step_if_needed(report, step)
-            action_msg = f"Rendicion enviada a flujo '{selected_flow.name}'."
+        for expense in report.expenses:
+            expense.status = ExpenseStatus.SUBMITTED
+
+        step = selected_flow.steps[0]
+        _notify_step_if_needed(report, step)
+        action_msg = f"Rendicion enviada a flujo '{selected_flow.name}'."
 
         _audit(
             user,
