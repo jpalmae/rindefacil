@@ -20,7 +20,7 @@
                     Flujo</label>
                 <input type="text" name="name" required value="{{ flow.name if flow else '' }}"
                     placeholder="Ej: Gastos Mayores a $500.000"
-                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold">
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold text-gray-900 placeholder:text-gray-400">
             </div>
 
             <div>
@@ -28,7 +28,7 @@
                     Activación ($)</label>
                 <input type="number" name="min_amount" required
                     value="{{ flow.trigger_rules.get('min_amount', 0) if flow else 0 }}"
-                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold">
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold text-gray-900 placeholder:text-gray-400">
                 <p class="text-[10px] text-gray-400 mt-2 font-medium italic">Define desde qué monto se activará este
                     flujo automáticamente.</p>
             </div>
@@ -37,7 +37,7 @@
                 <label class="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Descripción
                     (Opcional)</label>
                 <textarea name="description" rows="3"
-                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium">{{ flow.description if flow else '' }}</textarea>
+                    class="w-full px-4 py-3 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-medium text-gray-900 placeholder:text-gray-400">{{ flow.description if flow else '' }}</textarea>
             </div>
 
             <button type="submit" class="btn-primary w-full py-4 text-lg shadow-xl shadow-primary/20">
