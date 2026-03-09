@@ -48,6 +48,7 @@ def create_app(config_name=None):
     # Inject common template context once per request to avoid repeated DB work in Jinja
     @app.context_processor
     def inject_template_context():
+        from app.models.company import Company
         from app.models.notification import Notification
 
         css_path = os.path.join(app.static_folder, 'css', 'uno.css')
@@ -73,6 +74,18 @@ def create_app(config_name=None):
                 or company_settings.get('brand_default_domain')
                 or ''
             )
+        else:
+            company = Company.query.order_by(Company.created_at.asc()).first()
+            if company and company.settings:
+                company_settings = company.settings or {}
+                brand_app_name = company_settings.get('brand_app_name') or brand_app_name
+                brand_logo_url = company_settings.get('brand_logo_url') or None
+                brand_icon_url = company_settings.get('brand_icon_url') or None
+                brand_default_domain = (
+                    company_settings.get('brand_user_default_domain')
+                    or company_settings.get('brand_default_domain')
+                    or ''
+                )
 
         return dict(
             css_version=css_version,
