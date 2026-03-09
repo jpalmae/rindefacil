@@ -48,6 +48,19 @@
                             <textarea name="description" rows="3" class="input"></textarea>
                         </div>
 
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Rendición *</label>
+                            <select name="settlement_type" class="input" required>
+                                {% for value, label in settlement_type_options.items() %}
+                                <option value="{{ value }}" {% if value == default_settlement_type %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="mt-1 text-xs text-gray-500">
+                                Usa <strong>Solicitar devolucion</strong> cuando la empresa debe reembolsarte el gasto.
+                                Usa <strong>Tarjeta corporativa</strong> cuando solo necesitas rendir un gasto ya pagado por la empresa.
+                            </p>
+                        </div>
+
                         <div class="pt-4 border-t border-gray-100">
                             <div class="flex justify-between items-center mb-1 text-sm text-gray-500">
                                 <span>Gastos Seleccionados:</span>

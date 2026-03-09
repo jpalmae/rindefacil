@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models.report import Report, ReportStatus
+from app.models.report import Report, ReportSettlementType, ReportStatus
 from app.models.expense import Expense, ExpenseStatus
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
 from datetime import datetime
@@ -51,6 +51,7 @@ def new():
     if request.method == 'POST':
         title = request.form.get('title')
         description = request.form.get('description')
+        settlement_type = request.form.get('settlement_type') or ReportSettlementType.EMPLOYEE_REIMBURSEMENT
         selected_expense_ids = request.form.getlist('expense_ids')
         
         if not title:
@@ -60,6 +61,10 @@ def new():
         if not selected_expense_ids:
             flash('Debes seleccionar al menos un gasto para incluir en el informe.', 'warning')
             return redirect(url_for('reports.new'))
+
+        if not Report.is_valid_settlement_type(settlement_type):
+            flash('Debes seleccionar un tipo de rendicion valido.', 'warning')
+            return redirect(url_for('reports.new'))
             
         try:
             # Create report
@@ -68,7 +73,8 @@ def new():
                 user_id=current_user.id,
                 title=title,
                 description=description,
-                status=ReportStatus.DRAFT
+                status=ReportStatus.DRAFT,
+                settlement_type=settlement_type,
             )
             db.session.add(report)
             db.session.flush() # get report.id
@@ -105,7 +111,12 @@ def new():
             db.session.rollback()
             flash(f'Error al crear informe: {str(e)}', 'danger')
             
-    return render_template('reports/form.html', expenses=available_expenses)
+    return render_template(
+        'reports/form.html',
+        expenses=available_expenses,
+        settlement_type_options=ReportSettlementType.CHOICES,
+        default_settlement_type=ReportSettlementType.EMPLOYEE_REIMBURSEMENT,
+    )
 
 @reports_bp.route('/<uuid:id>')
 @login_required

@@ -13,6 +13,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
   comercio↔ubicación + fecha boleta↔rendición + hora boleta↔rendición (margen 20 min).
   Incluye además regla horaria habitual: L-V entre 09:00 y 19:00.
 - Rendiciones con múltiples gastos.
+- Tipo de rendición: solicitud de devolución o tarjeta corporativa.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
@@ -173,6 +174,11 @@ La aplicación separa tres conceptos:
 - `Rendición`: agrupación de uno o más gastos. Internamente el modelo se llama `Report`, pero en la UI corresponde a una rendición.
 - `Flujo de aprobación`: se ejecuta sobre la rendición, no sobre el gasto individual.
 
+Cada rendición además tiene un `tipo`:
+
+- `employee_reimbursement`: solicitar devolución al empleado.
+- `corporate_card`: rendición de tarjeta corporativa, sin devolución de dinero.
+
 Secuencia normal de uso:
 
 1. Crear uno o varios gastos.
@@ -272,6 +278,7 @@ Autenticación:
   También acepta `receipt_time` (`HH:MM` o `HH:MM:SS`).
 - `GET /reports`: lista rendiciones.
 - `POST /reports`: crea rendición a partir de `expense_ids`.
+  Acepta `settlement_type` con valores `employee_reimbursement` o `corporate_card`.
 - `GET /reports/{id}`: detalle completo (gastos + decisiones).
 - `POST /reports/{id}/submit`: envía rendición al flujo de aprobación.
 - `POST /reports/{id}/approve`: aprueba un paso o aprobación final.

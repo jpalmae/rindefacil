@@ -11,6 +11,16 @@ class ReportStatus:
     REJECTED = 'rejected'
     PAID = 'paid'
 
+
+class ReportSettlementType:
+    EMPLOYEE_REIMBURSEMENT = 'employee_reimbursement'
+    CORPORATE_CARD = 'corporate_card'
+
+    CHOICES = {
+        EMPLOYEE_REIMBURSEMENT: 'Solicitar devolucion',
+        CORPORATE_CARD: 'Tarjeta corporativa',
+    }
+
 class Report(db.Model):
     __tablename__ = 'reports'
 
@@ -21,6 +31,11 @@ class Report(db.Model):
     title = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text)
     status = db.Column(db.String(30), default=ReportStatus.DRAFT)
+    settlement_type = db.Column(
+        db.String(50),
+        nullable=False,
+        default=ReportSettlementType.EMPLOYEE_REIMBURSEMENT,
+    )
     
     total_amount = db.Column(db.Numeric(14, 2), default=0)
     currency = db.Column(db.String(3), default='CLP')
@@ -48,6 +63,14 @@ class Report(db.Model):
     @property
     def public_id(self):
         return f"RND-{self.id.hex.upper()}"
+
+    @property
+    def settlement_type_label(self):
+        return ReportSettlementType.CHOICES.get(self.settlement_type, self.settlement_type or '')
+
+    @classmethod
+    def is_valid_settlement_type(cls, value):
+        return value in ReportSettlementType.CHOICES
 
     def __repr__(self):
         return f'<Report {self.title}>'

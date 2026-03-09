@@ -24,10 +24,11 @@ def generate_report_pdf(report):
     )
     
     # Title
-    Story.append(Paragraph(f"Informe de Rendición: {report.title}", title_style))
+    Story.append(Paragraph(f"Rendicion: {report.title}", title_style))
     Story.append(Paragraph(f"<b>Generado por:</b> {report.user.full_name}", styles['Normal']))
     Story.append(Paragraph(f"<b>Fecha de Solicitud:</b> {report.created_at.strftime('%d/%m/%Y')}", styles['Normal']))
     Story.append(Paragraph(f"<b>Estado:</b> {report.status.upper()}", styles['Normal']))
+    Story.append(Paragraph(f"<b>Tipo:</b> {report.settlement_type_label}", styles['Normal']))
     Story.append(Paragraph(f"<b>Monto Total:</b> ${report.total_amount:,.0f} {report.currency}", styles['Normal']))
     Story.append(Spacer(1, 20))
     

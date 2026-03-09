@@ -23,6 +23,7 @@ from app.models import (
     ExpenseStatus,
     Policy,
     Report,
+    ReportSettlementType,
     ReportStatus,
     User,
     UserApiKey,
@@ -310,6 +311,8 @@ def _serialize_report(report, expense_count=None, include_expenses=False, includ
         "title": report.title,
         "description": report.description,
         "status": report.status,
+        "settlement_type": report.settlement_type,
+        "settlement_type_label": report.settlement_type_label,
         "total_amount": _decimal_as_text(report.total_amount),
         "currency": report.currency,
         "approval_flow_id": str(report.approval_flow_id) if report.approval_flow_id else None,
@@ -949,6 +952,7 @@ def reports_create():
 
     title = (data.get("title") or "").strip()
     description = (data.get("description") or "").strip() or None
+    settlement_type = (data.get("settlement_type") or ReportSettlementType.EMPLOYEE_REIMBURSEMENT).strip()
 
     if request.is_json:
         expense_ids_raw = (request.get_json(silent=True) or {}).get("expense_ids") or []
@@ -959,6 +963,9 @@ def reports_create():
 
     if not title:
         return _error("Debes enviar 'title'.", status=422, code="validation_error")
+
+    if not Report.is_valid_settlement_type(settlement_type):
+        return _error("Debes enviar un settlement_type valido.", status=422, code="validation_error")
 
     if not expense_ids_raw:
         return _error("Debes enviar al menos un expense_id.", status=422, code="validation_error")
@@ -993,6 +1000,7 @@ def reports_create():
             title=title,
             description=description,
             status=ReportStatus.DRAFT,
+            settlement_type=settlement_type,
         )
         db.session.add(report)
         db.session.flush()

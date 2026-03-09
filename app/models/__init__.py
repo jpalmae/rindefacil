@@ -3,7 +3,7 @@ from app.models.user import User, UserRole
 from app.models.category import Category
 from app.models.cost_center import CostCenter
 from app.models.expense import Expense, ExpenseStatus, ExpenseType
-from app.models.report import Report, ReportStatus
+from app.models.report import Report, ReportSettlementType, ReportStatus
 from app.models.policy import Policy
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
 from app.models.notification import Notification
@@ -21,6 +21,7 @@ __all__ = [
     'ExpenseStatus',
     'ExpenseType',
     'Report',
+    'ReportSettlementType',
     'ReportStatus',
     'Policy',
     'ApprovalFlow',
