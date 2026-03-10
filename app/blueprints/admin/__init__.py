@@ -3,6 +3,7 @@ import time
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from app.extensions import db
 from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog
@@ -97,7 +98,12 @@ def user_new():
         )
         user.set_password(password)
         db.session.add(user)
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash('Ya existe un usuario con ese email.', 'danger')
+            return redirect(url_for('admin.user_new'))
         
         from app.services.audit_service import log_action
         log_action('user_created', entity_type='user', entity_id=user.id, description=f"Usuario {email} creado por admin.")
@@ -142,7 +148,12 @@ def user_edit(user_id):
         if password:
             user.set_password(password)
             
-        db.session.commit()
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            flash('Ya existe otro usuario con ese email.', 'danger')
+            return redirect(url_for('admin.user_edit', user_id=user_id))
         
         from app.services.audit_service import log_action
         log_action('user_updated', entity_type='user', entity_id=user.id, description=f"Usuario {user.email} editado por admin.")
