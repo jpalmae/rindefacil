@@ -302,10 +302,23 @@ def flow_delete(flow_id):
     flash('Flujo de aprobación eliminado.', 'warning')
     return redirect(url_for('admin.flows'))
 
-@admin_bp.route('/flows/<uuid:flow_id>/steps/<int:step_id>/delete', methods=['POST'])
+@admin_bp.route('/flows/<uuid:flow_id>/steps/<uuid:step_id>/delete', methods=['POST'])
 def step_delete(flow_id, step_id):
     step = ApprovalStep.query.get_or_404(step_id)
+    if step.flow_id != flow_id:
+        flash('El paso no pertenece al flujo indicado.', 'danger')
+        return redirect(url_for('admin.flows'))
+
     db.session.delete(step)
+
+    db.session.flush()
+    remaining_steps = ApprovalStep.query.filter(
+        ApprovalStep.flow_id == flow_id,
+        ApprovalStep.id != step_id,
+    ).order_by(ApprovalStep.step_number.asc()).all()
+    for index, remaining_step in enumerate(remaining_steps, start=1):
+        remaining_step.step_number = index
+
     db.session.commit()
     flash('Paso eliminado.', 'warning')
     return redirect(url_for('admin.flow_steps', flow_id=flow_id))
