@@ -15,6 +15,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Rendiciones con múltiples gastos.
 - Tipo de rendición: solicitud de devolución o tarjeta corporativa.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
+- Solicitud de antecedentes adicionales durante la aprobación, con reenvío al mismo paso del flujo.
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
 - Branding por empresa: nombre de app, ícono, logo y dominio por defecto para emails de usuarios.
@@ -186,10 +187,18 @@ Secuencia normal de uso:
 3. Crear la rendición en estado borrador.
 4. Enviar la rendición al flujo de aprobación.
 
+Durante la aprobación puede ocurrir además este ciclo:
+
+1. El aprobador solicita antecedentes adicionales con comentario obligatorio.
+2. La rendición pasa a estado `needs_info`.
+3. El solicitante ve el motivo en la rendición, responde y la reenvía.
+4. La revisión vuelve al mismo paso del flujo, no al inicio.
+
 Importante:
 
 - Si no existe un flujo activo con pasos configurados para la empresa, la rendición no se envía y se mantiene en borrador.
 - Los gastos individuales no se aprueban por separado; el resultado final se refleja en la rendición y en los gastos asociados.
+- `needs_info` no es rechazo: significa que faltan antecedentes o contexto para decidir.
 
 ## Roles y perfiles
 
@@ -220,6 +229,8 @@ Notas operativas:
 - El flujo se evalúa al enviar la rendición.
 - Si el flujo no tiene pasos o no existe uno aplicable, la rendición permanece en borrador.
 - La aprobación afecta a la rendición y actualiza el estado de los gastos que contiene.
+- Un aprobador puede pedir antecedentes adicionales sin rechazar la rendición.
+- Cuando el solicitante responde, la rendición vuelve al mismo paso pendiente.
 
 ### Administración
 

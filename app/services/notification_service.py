@@ -66,3 +66,15 @@ def notify_report_rejected(report, reason):
     # Email alert
     send_report_status_email(report.user, report, 'rechazado', reason)
     return notification
+
+
+def notify_report_info_requested(report, reason):
+    notification = create_notification(
+        user_id=report.user_id,
+        type='report_info_requested',
+        title='Antecedentes Adicionales Solicitados',
+        message=f'Tu rendición "{report.title}" requiere antecedentes adicionales. Motivo: {reason}',
+        link=url_for('reports.show', id=report.id)
+    )
+    send_report_status_email(report.user, report, 'observada para antecedentes adicionales', reason)
+    return notification

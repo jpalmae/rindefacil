@@ -30,7 +30,12 @@ from app.models import (
     UserRole,
 )
 from app.services.location_service import evaluate_expense_integrity, reverse_geocode
-from app.services.notification_service import notify_approval_needed, notify_report_approved, notify_report_rejected
+from app.services.notification_service import (
+    notify_approval_needed,
+    notify_report_approved,
+    notify_report_info_requested,
+    notify_report_rejected,
+)
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
 
@@ -38,6 +43,7 @@ api_bp = Blueprint("api", __name__)
 
 ALLOWED_RECEIPT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 REVIEW_STATUSES = {ReportStatus.UNDER_REVIEW, "in_review"}
+EDITABLE_REPORT_STATUSES = {ReportStatus.DRAFT, ReportStatus.NEEDS_INFO}
 
 
 def _ok(data=None, status=200):
@@ -323,6 +329,19 @@ def _serialize_report(report, expense_count=None, include_expenses=False, includ
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "updated_at": report.updated_at.isoformat() if report.updated_at else None,
     }
+
+    latest_info_request = next(
+        (decision for decision in report.decisions if decision.decision == "info_requested"),
+        None,
+    ) if include_decisions else None
+    if latest_info_request:
+        data["latest_info_request"] = {
+            "user_id": str(latest_info_request.user_id),
+            "user_name": latest_info_request.user.full_name if latest_info_request.user else None,
+            "step_number": latest_info_request.step_number,
+            "comments": latest_info_request.comments,
+            "decided_at": latest_info_request.decided_at.isoformat() if latest_info_request.decided_at else None,
+        }
 
     if include_expenses:
         expenses = report.expenses.order_by(Expense.created_at.desc()).all()
@@ -1101,34 +1120,67 @@ def reports_submit(report_id):
     if report.user_id != user.id and not _is_admin_like(user):
         return _error("Solo el solicitante o admin puede enviar esta rendicion.", status=403, code="forbidden")
 
-    if report.status != ReportStatus.DRAFT:
-        return _error("Solo se pueden enviar rendiciones en borrador.", status=409, code="invalid_state")
+    if report.status not in EDITABLE_REPORT_STATUSES:
+        return _error(
+            "Solo se pueden enviar rendiciones en borrador o con antecedentes solicitados.",
+            status=409,
+            code="invalid_state",
+        )
 
     try:
-        selected_flow = _select_approval_flow(report.company_id, report.total_amount)
-        if not selected_flow or not selected_flow.steps:
-            db.session.rollback()
-            return _error(
-                "No existe un flujo de aprobacion activo para esta rendicion. Se mantiene en borrador.",
-                status=409,
-                code="no_approval_flow",
+        response_comment = (data.get("response_comment") or data.get("comment") or "").strip()
+        is_resubmitting_info = report.status == ReportStatus.NEEDS_INFO
+        if is_resubmitting_info:
+            if not response_comment:
+                return _error(
+                    "Debes indicar qué antecedentes adicionales estás entregando en 'response_comment'.",
+                    status=422,
+                    code="validation_error",
+                )
+            if not report.approval_flow_id or not report.current_step:
+                return _error(
+                    "La rendicion no tiene un paso de aprobacion valido para retomar la revision.",
+                    status=409,
+                    code="invalid_state",
+                )
+            decision = ApprovalDecision(
+                report_id=report.id,
+                user_id=user.id,
+                step_number=report.current_step,
+                decision="info_submitted",
+                comments=response_comment,
             )
+            db.session.add(decision)
+            selected_flow = report.approval_flow
+        else:
+            selected_flow = _select_approval_flow(report.company_id, report.total_amount)
+            if not selected_flow or not selected_flow.steps:
+                db.session.rollback()
+                return _error(
+                    "No existe un flujo de aprobacion activo para esta rendicion. Se mantiene en borrador.",
+                    status=409,
+                    code="no_approval_flow",
+                )
 
-        report.approval_flow_id = selected_flow.id
-        report.current_step = 1
+            report.approval_flow_id = selected_flow.id
+            report.current_step = 1
         report.status = ReportStatus.UNDER_REVIEW
         report.submitted_at = datetime.utcnow()
 
         for expense in report.expenses:
             expense.status = ExpenseStatus.SUBMITTED
 
-        step = selected_flow.steps[0]
+        step = _current_step(report)
         _notify_step_if_needed(report, step)
-        action_msg = f"Rendicion enviada a flujo '{selected_flow.name}'."
+        action_msg = (
+            "Antecedentes adicionales reenviados al mismo aprobador."
+            if is_resubmitting_info
+            else f"Rendicion enviada a flujo '{selected_flow.name}'."
+        )
 
         _audit(
             user,
-            action="api_report_submitted",
+            action="api_report_resubmitted_with_info" if is_resubmitting_info else "api_report_submitted",
             entity_type="report",
             entity_id=report.id,
             description=action_msg,
@@ -1159,6 +1211,9 @@ def reports_approve(report_id):
 
     if report.status in {ReportStatus.APPROVED, ReportStatus.REJECTED, ReportStatus.PAID}:
         return _error("La rendicion ya fue resuelta.", status=409, code="invalid_state")
+
+    if report.status not in REVIEW_STATUSES:
+        return _error("La rendicion no esta actualmente en revision.", status=409, code="invalid_state")
 
     if not report.approval_flow_id:
         if not _is_admin_like(user):
@@ -1263,6 +1318,9 @@ def reports_reject(report_id):
     if report.status in {ReportStatus.APPROVED, ReportStatus.REJECTED, ReportStatus.PAID}:
         return _error("La rendicion ya fue resuelta.", status=409, code="invalid_state")
 
+    if report.status not in REVIEW_STATUSES:
+        return _error("La rendicion no esta actualmente en revision.", status=409, code="invalid_state")
+
     if report.approval_flow_id:
         step = _current_step(report)
         if not _user_can_review_step(user, report, step):
@@ -1310,3 +1368,71 @@ def reports_reject(report_id):
         db.session.rollback()
         current_app.logger.error("Error rechazando rendicion via API: %s", exc)
         return _error("No se pudo rechazar la rendicion.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>/request-info", methods=["POST"])
+@api_auth_required
+def reports_request_info(report_id):
+    user = g.api_user
+    data = _data_dict()
+    reason = (data.get("reason") or data.get("comment") or "").strip()
+
+    if not reason:
+        return _error(
+            "Debes enviar el detalle de los antecedentes solicitados en 'reason'.",
+            status=422,
+            code="validation_error",
+        )
+
+    report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if report.company_id != user.company_id:
+        return _error("No tienes permisos para solicitar antecedentes en esta rendicion.", status=403, code="forbidden")
+
+    if report.status not in REVIEW_STATUSES:
+        return _error("La rendicion no esta actualmente en revision.", status=409, code="invalid_state")
+
+    if report.approval_flow_id:
+        step = _current_step(report)
+        if not _user_can_review_step(user, report, step):
+            return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
+    elif not _is_admin_like(user):
+        return _error("No tienes permisos para solicitar antecedentes.", status=403, code="forbidden")
+
+    try:
+        decision = ApprovalDecision(
+            report_id=report.id,
+            user_id=user.id,
+            step_number=report.current_step,
+            decision="info_requested",
+            comments=reason,
+        )
+        db.session.add(decision)
+
+        report.status = ReportStatus.NEEDS_INFO
+        for expense in report.expenses:
+            expense.status = ExpenseStatus.DRAFT
+
+        _audit(
+            user,
+            action="api_report_info_requested",
+            entity_type="report",
+            entity_id=report.id,
+            description=f"Antecedentes adicionales solicitados: {reason}",
+        )
+
+        db.session.commit()
+        notify_report_info_requested(report, reason)
+
+        return _ok(
+            {
+                "message": "Se solicitaron antecedentes adicionales al solicitante.",
+                "report": _serialize_report(report, include_decisions=True),
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error solicitando antecedentes via API: %s", exc)
+        return _error("No se pudieron solicitar antecedentes.", status=500, code="server_error")

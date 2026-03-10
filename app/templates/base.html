@@ -375,9 +375,9 @@
                                     class="block px-4 py-4 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
                                     <div class="flex gap-3">
                                         <div
-                                            class="flex-shrink-0 w-8 h-8 rounded-full {{ 'bg-blue-100 text-blue-600' if 'approval' in n.type else 'bg-green-100 text-green-600' }} flex items-center justify-center">
+                                            class="flex-shrink-0 w-8 h-8 rounded-full {{ 'bg-blue-100 text-blue-600' if 'approval' in n.type else ('bg-amber-100 text-amber-700' if 'info' in n.type else 'bg-green-100 text-green-600') }} flex items-center justify-center">
                                             <span
-                                                class="{{ 'i-heroicons-hand-thumb-up' if 'approved' in n.type else ('i-heroicons-document-text' if 'pending' in n.type else 'i-heroicons-information-circle') }} text-sm"></span>
+                                                class="{{ 'i-heroicons-hand-thumb-up' if 'approved' in n.type else ('i-heroicons-document-text' if 'pending' in n.type else ('i-heroicons-document-magnifying-glass' if 'info' in n.type else 'i-heroicons-information-circle')) }} text-sm"></span>
                                         </div>
                                         <div class="flex-1 min-w-0">
                                             <p class="text-sm font-bold text-gray-900 truncate">{{ n.title }}</p>

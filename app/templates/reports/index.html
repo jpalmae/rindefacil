@@ -61,6 +61,8 @@
                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                 {% if report.status == 'draft' %}
                                 <span class="badge-yellow">Borrador</span>
+                                {% elif report.status == 'needs_info' %}
+                                <span class="badge bg-amber-100 text-amber-800">Antecedentes solicitados</span>
                                 {% elif report.status in ['submitted', 'in_review', 'under_review'] %}
                                 <span class="badge bg-blue-100 text-blue-800">En revisión</span>
                                 {% elif report.status == 'approved' %}
@@ -95,6 +97,8 @@
                             </div>
                             {% if report.status == 'draft' %}
                             <span class="badge-yellow !text-[10px] !px-2 !py-0.5">Borrador</span>
+                            {% elif report.status == 'needs_info' %}
+                            <span class="badge bg-amber-100 text-amber-800 !text-[10px] !px-2 !py-0.5">Antecedentes solicitados</span>
                             {% elif report.status == 'approved' %}
                             <span class="badge-green !text-[10px] !px-2 !py-0.5">Aprobado</span>
                             {% elif report.status == 'rejected' %}

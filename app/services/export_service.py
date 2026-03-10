@@ -5,6 +5,19 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from flask import send_file
 
+
+def _report_status_label(report):
+    labels = {
+        'draft': 'BORRADOR',
+        'under_review': 'EN REVISION',
+        'in_review': 'EN REVISION',
+        'needs_info': 'ANTECEDENTES SOLICITADOS',
+        'approved': 'APROBADO',
+        'rejected': 'RECHAZADO',
+        'paid': 'PAGADO',
+    }
+    return labels.get(report.status, (report.status or '').upper())
+
 def generate_report_pdf(report):
     """
     Genera un archivo PDF con el detalle del informe de rendición y sus comprobantes.
@@ -27,7 +40,7 @@ def generate_report_pdf(report):
     Story.append(Paragraph(f"Rendicion: {report.title}", title_style))
     Story.append(Paragraph(f"<b>Generado por:</b> {report.user.full_name}", styles['Normal']))
     Story.append(Paragraph(f"<b>Fecha de Solicitud:</b> {report.created_at.strftime('%d/%m/%Y')}", styles['Normal']))
-    Story.append(Paragraph(f"<b>Estado:</b> {report.status.upper()}", styles['Normal']))
+    Story.append(Paragraph(f"<b>Estado:</b> {_report_status_label(report)}", styles['Normal']))
     Story.append(Paragraph(f"<b>Tipo:</b> {report.settlement_type_label}", styles['Normal']))
     Story.append(Paragraph(f"<b>Monto Total:</b> ${report.total_amount:,.0f} {report.currency}", styles['Normal']))
     Story.append(Spacer(1, 20))

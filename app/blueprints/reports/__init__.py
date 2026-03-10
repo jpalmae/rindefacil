@@ -11,11 +11,18 @@ from uuid import UUID
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload, selectinload
 from app.services.export_service import generate_report_pdf
-from app.services.notification_service import notify_approval_needed, notify_report_approved, notify_report_rejected
+from app.services.notification_service import (
+    notify_approval_needed,
+    notify_report_approved,
+    notify_report_info_requested,
+    notify_report_rejected,
+)
 from app.models import User
 from app.services.audit_service import log_action
 
 reports_bp = Blueprint('reports', __name__)
+REVIEW_STATUSES = {ReportStatus.UNDER_REVIEW, 'in_review'}
+EDITABLE_REPORT_STATUSES = {ReportStatus.DRAFT, ReportStatus.NEEDS_INFO}
 
 
 def _can_manage_draft_report(report):
@@ -167,6 +174,7 @@ def show(id):
         expenses=expenses,
         expense_count=len(expenses),
         can_manage_draft_report=_can_manage_draft_report(report),
+        latest_info_request=next((decision for decision in report.decisions if decision.decision == 'info_requested'), None),
     )
 
 
@@ -175,8 +183,8 @@ def show(id):
 def delete(id):
     report = Report.query.get_or_404(id)
 
-    if not _can_manage_draft_report(report) or report.status != ReportStatus.DRAFT:
-        flash('Solo puedes eliminar rendiciones en borrador.', 'warning')
+    if not _can_manage_draft_report(report) or report.status not in EDITABLE_REPORT_STATUSES:
+        flash('Solo puedes eliminar rendiciones en borrador o con antecedentes solicitados.', 'warning')
         return redirect(url_for('reports.show', id=id))
 
     try:
@@ -211,8 +219,8 @@ def remove_expense(report_id, expense_id):
     report = Report.query.get_or_404(report_id)
     expense = Expense.query.get_or_404(expense_id)
 
-    if not _can_manage_draft_report(report) or report.status != ReportStatus.DRAFT:
-        flash('Solo puedes modificar rendiciones en borrador.', 'warning')
+    if not _can_manage_draft_report(report) or report.status not in EDITABLE_REPORT_STATUSES:
+        flash('Solo puedes modificar rendiciones en borrador o con antecedentes solicitados.', 'warning')
         return redirect(url_for('reports.show', id=report_id))
 
     if expense.report_id != report.id:
@@ -243,31 +251,54 @@ def remove_expense(report_id, expense_id):
 def submit(id):
     report = Report.query.get_or_404(id)
     
-    if report.user_id != current_user.id or report.status != ReportStatus.DRAFT:
+    if report.user_id != current_user.id or report.status not in EDITABLE_REPORT_STATUSES:
         flash('Acción no permitida.', 'danger')
         return redirect(url_for('reports.show', id=id))
         
     try:
-        # Phase 3: Selection of Approval Flow
-        flows = ApprovalFlow.query.filter_by(company_id=current_user.company_id, is_active=True).all()
         selected_flow = None
-        
-        # Rule matching (Basic: amount based)
-        for flow in flows:
-            rules = flow.trigger_rules or {}
-            min_amount = float(rules.get('min_amount', 0))
-            if float(report.total_amount) >= min_amount:
-                # Select the most restrictive or just the first matching for now
-                selected_flow = flow
-                break
-        
-        if not selected_flow or not selected_flow.steps:
-            db.session.rollback()
-            flash('No existe un flujo de aprobación activo para esta rendición. El informe se mantiene en borrador hasta que un administrador configure uno.', 'warning')
-            return redirect(url_for('reports.show', id=id))
+        info_response_comment = (request.form.get('info_response_comment') or '').strip()
+        is_resubmitting_info = report.status == ReportStatus.NEEDS_INFO
 
-        report.approval_flow_id = selected_flow.id
-        report.current_step = 1 # Start at step 1
+        if is_resubmitting_info:
+            if not info_response_comment:
+                flash('Debes indicar qué antecedentes adicionales estás entregando antes de reenviar la rendición.', 'warning')
+                return redirect(url_for('reports.show', id=id))
+
+            if not report.approval_flow_id or not report.current_step:
+                flash('La rendición no tiene un paso de aprobación válido para retomar la revisión.', 'danger')
+                return redirect(url_for('reports.show', id=id))
+
+            selected_flow = report.approval_flow
+            decision = ApprovalDecision(
+                report_id=report.id,
+                user_id=current_user.id,
+                step_number=report.current_step,
+                decision='info_submitted',
+                comments=info_response_comment
+            )
+            db.session.add(decision)
+        else:
+            # Phase 3: Selection of Approval Flow
+            flows = ApprovalFlow.query.filter_by(company_id=current_user.company_id, is_active=True).all()
+            
+            # Rule matching (Basic: amount based)
+            for flow in flows:
+                rules = flow.trigger_rules or {}
+                min_amount = float(rules.get('min_amount', 0))
+                if float(report.total_amount) >= min_amount:
+                    # Select the most restrictive or just the first matching for now
+                    selected_flow = flow
+                    break
+            
+            if not selected_flow or not selected_flow.steps:
+                db.session.rollback()
+                flash('No existe un flujo de aprobación activo para esta rendición. El informe se mantiene en borrador hasta que un administrador configure uno.', 'warning')
+                return redirect(url_for('reports.show', id=id))
+
+            report.approval_flow_id = selected_flow.id
+            report.current_step = 1 # Start at step 1
+
         report.status = ReportStatus.UNDER_REVIEW
         report.submitted_at = datetime.utcnow()
         
@@ -275,8 +306,11 @@ def submit(id):
         for exp in report.expenses:
             exp.status = ExpenseStatus.SUBMITTED
             
-        # Notify potential approvers of Step 1
-        current_step_obj = selected_flow.steps[0] if selected_flow.steps else None
+        # Notify current approver
+        current_step_obj = ApprovalStep.query.filter_by(
+            flow_id=report.approval_flow_id,
+            step_number=report.current_step
+        ).first()
         if current_step_obj:
             # Find users that match this step to notify
             if current_step_obj.approver_type == 'role':
@@ -288,15 +322,22 @@ def submit(id):
             elif current_step_obj.approver_type == 'manager' and report.user.manager_id:
                 notify_approval_needed(report.user.manager_id, report)
             
-        flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
+        if is_resubmitting_info:
+            flash('Antecedentes adicionales reenviados al mismo aprobador.', 'success')
+        else:
+            flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
             
         db.session.commit()
         
         log_action(
-            action='report_submitted',
+            action='report_resubmitted_with_info' if is_resubmitting_info else 'report_submitted',
             entity_type='report',
             entity_id=report.id,
-            description=f"Informe '{report.title}' enviado para aprobación."
+            description=(
+                f"Rendición '{report.title}' reenviada con antecedentes adicionales."
+                if is_resubmitting_info else
+                f"Informe '{report.title}' enviado para aprobación."
+            )
         )
     except Exception as e:
         db.session.rollback()
@@ -309,6 +350,10 @@ def submit(id):
 def approve(id):
     report = Report.query.get_or_404(id)
     comment = request.form.get('comment', '')
+
+    if report.status not in REVIEW_STATUSES:
+        flash('La rendición no está actualmente en revisión.', 'warning')
+        return redirect(url_for('reports.show', id=id))
     
     # Check if report is in a flow
     if not report.approval_flow_id:
@@ -408,6 +453,10 @@ def approve(id):
 def reject(id):
     report = Report.query.get_or_404(id)
     comment = request.form.get('comment', '')
+
+    if report.status not in REVIEW_STATUSES:
+        flash('La rendición no está actualmente en revisión.', 'warning')
+        return redirect(url_for('reports.show', id=id))
     
     if not comment:
         flash('Debes indicar un motivo de rechazo.', 'warning')
@@ -443,6 +492,76 @@ def reject(id):
         db.session.rollback()
         flash(f'Error: {str(e)}', 'danger')
         
+    return redirect(url_for('reports.show', id=id))
+
+
+@reports_bp.route('/<uuid:id>/request-info', methods=['POST'])
+@login_required
+def request_info(id):
+    report = Report.query.get_or_404(id)
+    comment = (request.form.get('comment') or '').strip()
+
+    if report.status not in REVIEW_STATUSES:
+        flash('La rendición no está actualmente en revisión.', 'warning')
+        return redirect(url_for('reports.show', id=id))
+
+    if not comment:
+        flash('Debes indicar qué antecedentes adicionales estás solicitando.', 'warning')
+        return redirect(url_for('reports.show', id=id))
+
+    if report.approval_flow_id:
+        current_step = ApprovalStep.query.filter_by(
+            flow_id=report.approval_flow_id,
+            step_number=report.current_step
+        ).first()
+
+        if not current_step:
+            flash('Error en configuración de flujo.', 'danger')
+            return redirect(url_for('reports.show', id=id))
+
+        can_review = False
+        if current_step.approver_type == 'role':
+            can_review = current_user.has_role(current_step.approver_target)
+        elif current_step.approver_type == 'user':
+            can_review = str(current_user.id) == current_step.approver_target
+        elif current_step.approver_type == 'manager':
+            can_review = report.user.manager_id == current_user.id
+
+        if not can_review and not current_user.is_admin:
+            flash('No eres el aprobador designado para este paso.', 'warning')
+            return redirect(url_for('reports.show', id=id))
+    elif not (current_user.is_admin or current_user.has_role('manager')):
+        flash('No tienes permiso.', 'danger')
+        return redirect(url_for('reports.show', id=id))
+
+    try:
+        decision = ApprovalDecision(
+            report_id=report.id,
+            user_id=current_user.id,
+            step_number=report.current_step,
+            decision='info_requested',
+            comments=comment
+        )
+        db.session.add(decision)
+
+        report.status = ReportStatus.NEEDS_INFO
+        for exp in report.expenses:
+            exp.status = ExpenseStatus.DRAFT
+
+        db.session.commit()
+        notify_report_info_requested(report, comment)
+
+        log_action(
+            action='report_info_requested',
+            entity_type='report',
+            entity_id=report.id,
+            description=f"Se solicitaron antecedentes adicionales para la rendición '{report.title}'. Motivo: {comment}"
+        )
+        flash('Se solicitaron antecedentes adicionales al solicitante.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al solicitar antecedentes: {str(e)}', 'danger')
+
     return redirect(url_for('reports.show', id=id))
 
 @reports_bp.route('/<uuid:id>/export')

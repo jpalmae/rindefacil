@@ -7,6 +7,7 @@ class ReportStatus:
     DRAFT = 'draft'
     SUBMITTED = 'submitted'
     UNDER_REVIEW = 'under_review'
+    NEEDS_INFO = 'needs_info'
     APPROVED = 'approved'
     REJECTED = 'rejected'
     PAID = 'paid'
