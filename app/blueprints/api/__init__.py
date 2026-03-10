@@ -483,13 +483,13 @@ def _select_approval_flow(company_id, total_amount):
         rules = flow.trigger_rules or {}
         min_amount = Decimal(str(rules.get("min_amount", 0) or 0))
         if total >= min_amount:
-            eligible.append((min_amount, flow))
+            eligible.append((min_amount, len(flow.steps), flow))
 
     if not eligible:
         return None
 
-    eligible.sort(key=lambda x: x[0], reverse=True)
-    return eligible[0][1]
+    eligible.sort(key=lambda x: (x[0], x[1]), reverse=True)
+    return eligible[0][2]
 
 
 def _current_step(report):

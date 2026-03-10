@@ -57,6 +57,26 @@ def _recalculate_report_total(report_id):
     ).scalar()
     return total or Decimal("0")
 
+
+def _select_approval_flow(company_id, total_amount):
+    flows = ApprovalFlow.query.filter_by(company_id=company_id, is_active=True).all()
+    if not flows:
+        return None
+
+    eligible = []
+    total = Decimal(str(total_amount or 0))
+    for flow in flows:
+        rules = flow.trigger_rules or {}
+        min_amount = Decimal(str(rules.get('min_amount', 0) or 0))
+        if total >= min_amount:
+            eligible.append((min_amount, len(flow.steps), flow))
+
+    if not eligible:
+        return None
+
+    eligible.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return eligible[0][2]
+
 @reports_bp.route('/')
 @login_required
 def index():
@@ -302,17 +322,7 @@ def submit(id):
             )
             db.session.add(decision)
         else:
-            # Phase 3: Selection of Approval Flow
-            flows = ApprovalFlow.query.filter_by(company_id=current_user.company_id, is_active=True).all()
-            
-            # Rule matching (Basic: amount based)
-            for flow in flows:
-                rules = flow.trigger_rules or {}
-                min_amount = float(rules.get('min_amount', 0))
-                if float(report.total_amount) >= min_amount:
-                    # Select the most restrictive or just the first matching for now
-                    selected_flow = flow
-                    break
+            selected_flow = _select_approval_flow(current_user.company_id, report.total_amount)
             
             if not selected_flow or not selected_flow.steps:
                 db.session.rollback()
