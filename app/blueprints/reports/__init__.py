@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
 from app.extensions import db
@@ -14,6 +16,21 @@ from app.models import User
 from app.services.audit_service import log_action
 
 reports_bp = Blueprint('reports', __name__)
+
+
+def _can_manage_draft_report(report):
+    return report.company_id == current_user.company_id and (
+        report.user_id == current_user.id or current_user.is_admin
+    )
+
+
+def _recalculate_report_total(report_id):
+    total = db.session.query(
+        func.coalesce(func.sum(Expense.amount), Decimal("0"))
+    ).filter(
+        Expense.report_id == report_id
+    ).scalar()
+    return total or Decimal("0")
 
 @reports_bp.route('/')
 @login_required
@@ -148,8 +165,78 @@ def show(id):
         'reports/show.html',
         report=report,
         expenses=expenses,
-        expense_count=len(expenses)
+        expense_count=len(expenses),
+        can_manage_draft_report=_can_manage_draft_report(report),
     )
+
+
+@reports_bp.route('/<uuid:id>/delete', methods=['POST'])
+@login_required
+def delete(id):
+    report = Report.query.get_or_404(id)
+
+    if not _can_manage_draft_report(report) or report.status != ReportStatus.DRAFT:
+        flash('Solo puedes eliminar rendiciones en borrador.', 'warning')
+        return redirect(url_for('reports.show', id=id))
+
+    try:
+        detached_expense_count = 0
+        for expense in report.expenses.all():
+            expense.report_id = None
+            expense.status = ExpenseStatus.DRAFT
+            detached_expense_count += 1
+
+        report_title = report.title
+        report_id = report.id
+        db.session.delete(report)
+        db.session.commit()
+
+        log_action(
+            action='report_deleted',
+            entity_type='report',
+            entity_id=report_id,
+            description=f"Rendición '{report_title}' eliminada. {detached_expense_count} gasto(s) volvieron a borrador."
+        )
+        flash('Rendición eliminada. Sus gastos volvieron a Mis Gastos.', 'success')
+        return redirect(url_for('reports.index'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar la rendición: {str(e)}', 'danger')
+        return redirect(url_for('reports.show', id=id))
+
+
+@reports_bp.route('/<uuid:report_id>/expenses/<uuid:expense_id>/remove', methods=['POST'])
+@login_required
+def remove_expense(report_id, expense_id):
+    report = Report.query.get_or_404(report_id)
+    expense = Expense.query.get_or_404(expense_id)
+
+    if not _can_manage_draft_report(report) or report.status != ReportStatus.DRAFT:
+        flash('Solo puedes modificar rendiciones en borrador.', 'warning')
+        return redirect(url_for('reports.show', id=report_id))
+
+    if expense.report_id != report.id:
+        flash('El gasto no pertenece a esta rendición.', 'warning')
+        return redirect(url_for('reports.show', id=report_id))
+
+    try:
+        expense.report_id = None
+        expense.status = ExpenseStatus.DRAFT
+        report.total_amount = _recalculate_report_total(report.id)
+        db.session.commit()
+
+        log_action(
+            action='expense_removed_from_report',
+            entity_type='report',
+            entity_id=report.id,
+            description=f"Gasto '{expense.public_id}' removido de la rendición '{report.title}'."
+        )
+        flash('Gasto quitado de la rendición y devuelto a Mis Gastos.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al quitar el gasto: {str(e)}', 'danger')
+
+    return redirect(url_for('reports.show', id=report_id))
 
 @reports_bp.route('/<uuid:id>/submit', methods=['POST'])
 @login_required

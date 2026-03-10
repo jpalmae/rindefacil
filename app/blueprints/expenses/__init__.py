@@ -178,6 +178,39 @@ def index():
     return render_template('expenses/index.html', expenses=expenses)
 
 
+@expenses_bp.route('/<uuid:id>/delete', methods=['POST'])
+@login_required
+def delete(id):
+    expense = Expense.query.get_or_404(id)
+
+    if expense.user_id != current_user.id:
+        flash('No tienes permiso para eliminar este gasto.', 'danger')
+        return redirect(url_for('expenses.index'))
+
+    if expense.status != ExpenseStatus.DRAFT or expense.report_id is not None:
+        flash('Solo puedes eliminar gastos en borrador que no estén dentro de una rendición.', 'warning')
+        return redirect(url_for('expenses.index'))
+
+    try:
+        expense_public_id = expense.public_id
+        expense_merchant = expense.merchant or 'Sin comercio'
+        db.session.delete(expense)
+        db.session.commit()
+
+        log_action(
+            action='expense_deleted',
+            entity_type='expense',
+            entity_id=id,
+            description=f"Gasto '{expense_public_id}' ({expense_merchant}) eliminado por el usuario."
+        )
+        flash('Gasto eliminado.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al eliminar el gasto: {str(e)}', 'danger')
+
+    return redirect(url_for('expenses.index'))
+
+
 @expenses_bp.route('/new', methods=['GET', 'POST'])
 @login_required
 def new():
