@@ -86,6 +86,12 @@
             min-height: 100%;
         }
 
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: var(--font-body) !important;
             color: var(--text-1) !important;
@@ -170,6 +176,8 @@
             background-color: var(--bg-soft) !important;
             border-color: var(--line) !important;
             color: var(--text-1) !important;
+            max-width: 100%;
+            min-width: 0;
         }
 
         .input:focus {

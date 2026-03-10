@@ -63,8 +63,9 @@
                 <form action="{{ url_for('admin.step_delete', flow_id=flow.id, step_id=step.id) }}" method="POST"
                     onsubmit="return confirm('¿Eliminar este paso?');" class="inline">
                     <button type="submit"
-                        class="text-gray-300 hover:text-danger p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span class="i-heroicons-trash"></span>
+                        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-danger border border-danger/30 hover:bg-danger/10 transition-colors">
+                        <span class="i-heroicons-trash text-sm"></span>
+                        Eliminar
                     </button>
                 </form>
             </div>
