@@ -22,6 +22,26 @@
 
     <!-- Users Table -->
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="border-b border-gray-100 px-6 py-4">
+            <form method="GET" action="{{ url_for('admin.users') }}" class="flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+                <div class="relative w-full md:max-w-md">
+                    <span class="i-heroicons-magnifying-glass text-gray-400 text-lg absolute left-3 top-1/2 -translate-y-1/2"></span>
+                    <input
+                        type="search"
+                        name="q"
+                        value="{{ search or '' }}"
+                        placeholder="Buscar por nombre o email"
+                        class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-10 pr-4 text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:border-primary focus:ring-primary/20"
+                    >
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="submit" class="btn-primary !py-2 !px-4 !text-sm">Buscar</button>
+                    {% if search %}
+                    <a href="{{ url_for('admin.users') }}" class="btn-outline !py-2 !px-4 !text-sm">Limpiar</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-100">
                 <thead class="bg-gray-50/50">
@@ -44,6 +64,22 @@
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
+                    {% if not users %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-10 text-center">
+                            <div class="max-w-sm mx-auto">
+                                <div class="text-sm font-bold text-gray-900">No se encontraron usuarios</div>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    {% if search %}
+                                    No hay coincidencias para "{{ search }}".
+                                    {% else %}
+                                    Aún no hay usuarios cargados.
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
                     {% for u in users %}
                     <tr class="hover:bg-gray-50/50 transition-colors group">
                         <td class="px-6 py-4 whitespace-nowrap">

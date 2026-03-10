@@ -3,6 +3,7 @@ import time
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
+from sqlalchemy import or_
 from app.extensions import db
 from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog
 from werkzeug.utils import secure_filename
@@ -51,8 +52,18 @@ def index():
 
 @admin_bp.route('/users')
 def users():
-    users_list = User.query.filter_by(company_id=current_user.company_id).all()
-    return render_template('admin/users.html', users=users_list)
+    search = (request.args.get('q') or '').strip()
+    query = User.query.filter_by(company_id=current_user.company_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            or_(
+                User.full_name.ilike(like),
+                User.email.ilike(like),
+            )
+        )
+    users_list = query.order_by(User.full_name.asc()).all()
+    return render_template('admin/users.html', users=users_list, search=search)
 
 @admin_bp.route('/users/new', methods=['GET', 'POST'])
 def user_new():
