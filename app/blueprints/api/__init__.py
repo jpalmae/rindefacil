@@ -1110,6 +1110,7 @@ def reports_detail(report_id):
 @api_auth_required
 def reports_submit(report_id):
     user = g.api_user
+    data = _data_dict()
     report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
     if not report:
         return _error("Rendicion no encontrada.", status=404, code="not_found")
