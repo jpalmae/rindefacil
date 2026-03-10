@@ -8,7 +8,7 @@ from app.models.expense import Expense, ExpenseStatus
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 from app.services.export_service import generate_report_pdf
 from app.services.notification_service import (
@@ -23,11 +23,29 @@ from app.services.audit_service import log_action
 reports_bp = Blueprint('reports', __name__)
 REVIEW_STATUSES = {ReportStatus.UNDER_REVIEW, 'in_review'}
 EDITABLE_REPORT_STATUSES = {ReportStatus.DRAFT, ReportStatus.NEEDS_INFO}
+FINANCE_VISIBLE_STATUSES = {ReportStatus.APPROVED, ReportStatus.PAID}
 
 
 def _can_manage_draft_report(report):
     return report.company_id == current_user.company_id and (
         report.user_id == current_user.id or current_user.is_admin
+    )
+
+
+def _can_view_report(report):
+    if report.company_id != current_user.company_id:
+        return False
+    if report.user_id == current_user.id or current_user.has_role('admin') or current_user.has_role('manager'):
+        return True
+    return current_user.has_finance_report_access and report.status in FINANCE_VISIBLE_STATUSES
+
+
+def _can_mark_report_paid(report):
+    return (
+        report.company_id == current_user.company_id
+        and current_user.can_process_reimbursements
+        and report.status == ReportStatus.APPROVED
+        and report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
     )
 
 
@@ -45,6 +63,14 @@ def index():
     base_query = Report.query.options(joinedload(Report.user))
     if current_user.has_role('admin') or current_user.has_role('manager'):
         reports = base_query.filter_by(company_id=current_user.company_id).order_by(Report.created_at.desc()).all()
+    elif current_user.has_finance_report_access:
+        reports = base_query.filter(
+            Report.company_id == current_user.company_id,
+            or_(
+                Report.user_id == current_user.id,
+                Report.status.in_(FINANCE_VISIBLE_STATUSES),
+            ),
+        ).order_by(Report.created_at.desc()).all()
     else:
         reports = base_query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
 
@@ -152,11 +178,7 @@ def show(id):
     ).get_or_404(id)
     
     # Simple ACL
-    if report.company_id != current_user.company_id:
-        flash('No tienes permiso para ver este informe.', 'danger')
-        return redirect(url_for('dashboard.index'))
-        
-    if report.user_id != current_user.id and not current_user.has_role('admin') and not current_user.has_role('manager'):
+    if not _can_view_report(report):
         flash('No tienes permiso para ver este informe.', 'danger')
         return redirect(url_for('dashboard.index'))
         
@@ -174,6 +196,7 @@ def show(id):
         expenses=expenses,
         expense_count=len(expenses),
         can_manage_draft_report=_can_manage_draft_report(report),
+        can_mark_report_paid=_can_mark_report_paid(report),
         latest_info_request=next((decision for decision in report.decisions if decision.decision == 'info_requested'), None),
     )
 
@@ -570,8 +593,39 @@ def export_pdf(id):
     report = Report.query.get_or_404(id)
     
     # Solo se puede exportar si está aprobado o si es para revisión interna
-    if report.company_id != current_user.company_id:
+    if not _can_view_report(report):
         flash('No tienes permiso', 'danger')
         return redirect(url_for('reports.index'))
         
     return generate_report_pdf(report)
+
+
+@reports_bp.route('/<uuid:id>/mark-paid', methods=['POST'])
+@login_required
+def mark_paid(id):
+    report = Report.query.get_or_404(id)
+
+    if not _can_mark_report_paid(report):
+        flash('No tienes permiso para marcar esta rendición como pagada.', 'danger')
+        return redirect(url_for('reports.show', id=id))
+
+    try:
+        report.status = ReportStatus.PAID
+        report.paid_at = datetime.utcnow()
+        for expense in report.expenses:
+            expense.status = ExpenseStatus.PAID
+
+        db.session.commit()
+
+        log_action(
+            action='report_paid',
+            entity_type='report',
+            entity_id=report.id,
+            description=f"Rendición '{report.title}' marcada como pagada por {current_user.full_name}."
+        )
+        flash('Rendición marcada como pagada.', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error al marcar la rendición como pagada: {str(e)}', 'danger')
+
+    return redirect(url_for('reports.show', id=id))

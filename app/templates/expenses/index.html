@@ -77,6 +77,8 @@
                                 <span class="badge bg-blue-100 text-blue-800">Enviado</span>
                                 {% elif expense.status == 'approved' %}
                                 <span class="badge-green">Aprobado</span>
+                                {% elif expense.status == 'paid' %}
+                                <span class="badge border border-emerald-200 bg-emerald-50 text-emerald-700">Pagado</span>
                                 {% else %}
                                 <span class="badge-red">{{ expense.status | capitalize }}</span>
                                 {% endif %}
@@ -139,6 +141,8 @@
                             <span class="badge-yellow !text-[10px] !px-2 !py-0.5">Borrador</span>
                             {% elif expense.status == 'approved' %}
                             <span class="badge-green !text-[10px] !px-2 !py-0.5">Aprobado</span>
+                            {% elif expense.status == 'paid' %}
+                            <span class="badge border border-emerald-200 bg-emerald-50 text-emerald-700 !text-[10px] !px-2 !py-0.5">Pagado</span>
                             {% elif expense.status == 'rejected' %}
                             <span class="badge-red !text-[10px] !px-2 !py-0.5">Rechazado</span>
                             {% else %}

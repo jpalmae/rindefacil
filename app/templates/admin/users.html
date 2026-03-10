@@ -69,6 +69,16 @@
                             <span
                                 class="badge border border-gray-200 bg-gray-50 text-gray-600 uppercase tracking-tighter text-[9px] px-2 py-0.5">Empleado</span>
                             {% endif %}
+                            {% if u.can_view_approved_reports %}
+                            <div class="mt-2">
+                                <span
+                                    class="badge border border-amber-200 bg-amber-50 text-amber-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Finanzas</span>
+                                {% if u.can_mark_reimbursements_paid %}
+                                <span
+                                    class="badge border border-emerald-200 bg-emerald-50 text-emerald-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Puede Pagar</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             {% if u.manager %}

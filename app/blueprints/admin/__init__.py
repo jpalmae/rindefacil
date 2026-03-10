@@ -32,6 +32,12 @@ def _normalize_user_email(raw_email, default_domain=''):
         return f"{email}@{default_domain}"
     return email
 
+
+def _finance_permissions_from_form(form):
+    can_mark_reimbursements_paid = bool(form.get('can_mark_reimbursements_paid'))
+    can_view_approved_reports = bool(form.get('can_view_approved_reports')) or can_mark_reimbursements_paid
+    return can_view_approved_reports, can_mark_reimbursements_paid
+
 @admin_bp.before_request
 @login_required
 def ensure_admin():
@@ -62,6 +68,7 @@ def user_new():
         role = request.form.get('role')
         manager_id = request.form.get('manager_id')
         cost_center_id = request.form.get('cost_center_id')
+        can_view_approved_reports, can_mark_reimbursements_paid = _finance_permissions_from_form(request.form)
 
         if '@' not in email:
             flash('Debes ingresar un email válido o configurar dominio por defecto.', 'danger')
@@ -73,7 +80,9 @@ def user_new():
             email=email,
             role=role,
             manager_id=manager_id if manager_id else None,
-            cost_center_id=cost_center_id if cost_center_id else None
+            cost_center_id=cost_center_id if cost_center_id else None,
+            can_view_approved_reports=can_view_approved_reports,
+            can_mark_reimbursements_paid=can_mark_reimbursements_paid,
         )
         user.set_password(password)
         db.session.add(user)
@@ -109,6 +118,10 @@ def user_edit(user_id):
         user.role = request.form.get('role')
         user.manager_id = request.form.get('manager_id') if request.form.get('manager_id') else None
         user.cost_center_id = request.form.get('cost_center_id') if request.form.get('cost_center_id') else None
+        (
+            user.can_view_approved_reports,
+            user.can_mark_reimbursements_paid,
+        ) = _finance_permissions_from_form(request.form)
 
         if '@' not in user.email:
             flash('Debes ingresar un email válido o configurar dominio por defecto.', 'danger')

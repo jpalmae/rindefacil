@@ -8,7 +8,7 @@ from uuid import UUID
 
 import jwt
 from flask import Blueprint, current_app, g, jsonify, request
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 from werkzeug.utils import secure_filename
 
@@ -44,6 +44,7 @@ api_bp = Blueprint("api", __name__)
 ALLOWED_RECEIPT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 REVIEW_STATUSES = {ReportStatus.UNDER_REVIEW, "in_review"}
 EDITABLE_REPORT_STATUSES = {ReportStatus.DRAFT, ReportStatus.NEEDS_INFO}
+FINANCE_VISIBLE_STATUSES = {ReportStatus.APPROVED, ReportStatus.PAID}
 
 
 def _ok(data=None, status=200):
@@ -257,6 +258,11 @@ def _serialize_user(user):
         "role": user.role,
         "company_id": str(user.company_id),
         "is_active": bool(user.is_active),
+        "permissions": {
+            "can_view_approved_reports": bool(user.can_view_approved_reports),
+            "can_mark_reimbursements_paid": bool(user.can_mark_reimbursements_paid),
+            "has_finance_report_access": bool(user.has_finance_report_access),
+        },
     }
 
 
@@ -326,6 +332,7 @@ def _serialize_report(report, expense_count=None, include_expenses=False, includ
         "expense_count": expense_count if expense_count is not None else report.expenses.count(),
         "submitted_at": report.submitted_at.isoformat() if report.submitted_at else None,
         "approved_at": report.approved_at.isoformat() if report.approved_at else None,
+        "paid_at": report.paid_at.isoformat() if report.paid_at else None,
         "created_at": report.created_at.isoformat() if report.created_at else None,
         "updated_at": report.updated_at.isoformat() if report.updated_at else None,
     }
@@ -512,6 +519,23 @@ def _user_can_review_step(user, report, step):
         return report.user and report.user.manager_id == user.id
 
     return False
+
+
+def _user_can_view_report(user, report):
+    if report.company_id != user.company_id:
+        return False
+    if report.user_id == user.id or _is_admin_like(user):
+        return True
+    return user.has_finance_report_access and report.status in FINANCE_VISIBLE_STATUSES
+
+
+def _user_can_mark_report_paid(user, report):
+    return (
+        report.company_id == user.company_id
+        and user.can_process_reimbursements
+        and report.status == ReportStatus.APPROVED
+        and report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
+    )
 
 
 def _notify_step_if_needed(report, step):
@@ -927,6 +951,14 @@ def reports_list():
     query = Report.query.options(joinedload(Report.user)).order_by(Report.created_at.desc())
     if _is_admin_like(user):
         query = query.filter(Report.company_id == user.company_id)
+    elif user.has_finance_report_access:
+        query = query.filter(
+            Report.company_id == user.company_id,
+            or_(
+                Report.user_id == user.id,
+                Report.status.in_(FINANCE_VISIBLE_STATUSES),
+            ),
+        )
     else:
         query = query.filter(Report.user_id == user.id)
 
@@ -1093,10 +1125,7 @@ def reports_detail(report_id):
     if not report:
         return _error("Rendicion no encontrada.", status=404, code="not_found")
 
-    if report.company_id != user.company_id:
-        return _error("No tienes permisos para ver esta rendicion.", status=403, code="forbidden")
-
-    if not _is_admin_like(user) and report.user_id != user.id:
+    if not _user_can_view_report(user, report):
         return _error("No tienes permisos para ver esta rendicion.", status=403, code="forbidden")
 
     return _ok(
@@ -1437,3 +1466,36 @@ def reports_request_info(report_id):
         db.session.rollback()
         current_app.logger.error("Error solicitando antecedentes via API: %s", exc)
         return _error("No se pudieron solicitar antecedentes.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>/mark-paid", methods=["POST"])
+@api_auth_required
+def reports_mark_paid(report_id):
+    user = g.api_user
+    report = Report.query.options(joinedload(Report.user)).filter(Report.id == report_id).first()
+    if not report:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+
+    if not _user_can_mark_report_paid(user, report):
+        return _error("No tienes permisos para marcar esta rendicion como pagada.", status=403, code="forbidden")
+
+    try:
+        report.status = ReportStatus.PAID
+        report.paid_at = datetime.utcnow()
+        for expense in report.expenses:
+            expense.status = ExpenseStatus.PAID
+
+        _audit(
+            user,
+            action="api_report_paid",
+            entity_type="report",
+            entity_id=report.id,
+            description="Rendicion marcada como pagada.",
+        )
+
+        db.session.commit()
+        return _ok({"message": "Rendicion marcada como pagada.", "report": _serialize_report(report)})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error marcando rendicion como pagada via API: %s", exc)
+        return _error("No se pudo marcar la rendicion como pagada.", status=500, code="server_error")

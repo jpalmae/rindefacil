@@ -24,6 +24,8 @@ class User(UserMixin, db.Model):
     cost_center_id = db.Column(UUID(as_uuid=True), db.ForeignKey('cost_centers.id'), nullable=True)
     manager_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=True)
     monthly_limit = db.Column(db.Numeric(14, 2), nullable=True)
+    can_view_approved_reports = db.Column(db.Boolean, nullable=False, default=False)
+    can_mark_reimbursements_paid = db.Column(db.Boolean, nullable=False, default=False)
     avatar_url = db.Column(db.String(500))
     signature_url = db.Column(db.String(500))
     is_active = db.Column(db.Boolean, default=True)
@@ -54,6 +56,14 @@ class User(UserMixin, db.Model):
     @property
     def is_admin(self):
         return self.role in [UserRole.SUPERADMIN, UserRole.ADMIN]
+
+    @property
+    def has_finance_report_access(self):
+        return self.is_admin or self.can_view_approved_reports or self.can_mark_reimbursements_paid
+
+    @property
+    def can_process_reimbursements(self):
+        return self.is_admin or self.can_mark_reimbursements_paid
 
     def has_role(self, role_name):
         return self.role == role_name

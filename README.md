@@ -208,6 +208,12 @@ Roles disponibles:
 - `approver` / `reviewer`: participan en pasos definidos por flujo.
 - `admin` / `superadmin`: acceso a administración completa.
 
+Permisos adicionales sobre el usuario:
+- `can_view_approved_reports`: permite ver rendiciones `approved` y `paid` de toda la empresa.
+- `can_mark_reimbursements_paid`: permite marcar como `paid` las rendiciones aprobadas de tipo `employee_reimbursement`.
+
+Estos permisos son acumulativos y no reemplazan el rol principal. Un mismo usuario puede, por ejemplo, seguir siendo `manager` y además operar como Finanzas.
+
 Acceso administrativo (`/admin`) requiere rol `admin` o `superadmin`.
 
 ## Flujos de aprobación y administración
@@ -238,6 +244,7 @@ Ruta: `/admin`.
 
 Módulos principales:
 - `Usuarios`: crear/editar/eliminar, rol, manager, centro de costo.
+- `Permisos de Finanzas`: visibilidad corporativa de rendiciones aprobadas y cierre de devoluciones pagadas.
 - `Centros de costo`: código y presupuesto mensual.
 - `Flujos`: diseño de pipeline de aprobación.
 - `Branding`: nombre app, ícono, logo y dominio por defecto de usuarios.

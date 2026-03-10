@@ -23,6 +23,8 @@
                     Revisión</span>
                 {% elif report.status == 'approved' %}
                 <span class="badge-green uppercase tracking-tighter text-[10px] px-2 py-0.5">Aprobado</span>
+                {% elif report.status == 'paid' %}
+                <span class="badge border border-emerald-200 bg-emerald-50 text-emerald-700 uppercase tracking-tighter text-[10px] px-2 py-0.5">Pagada</span>
                 {% elif report.status == 'rejected' %}
                 <span class="badge-red uppercase tracking-tighter text-[10px] px-2 py-0.5">Rechazado</span>
                 {% else %}
@@ -33,6 +35,9 @@
             <p class="text-gray-500 ml-8 text-sm">ID {{ report.public_id }}</p>
             <p class="text-gray-500 ml-8 text-sm">Creado por {{ report.user.full_name }} el {{
                 report.created_at.strftime('%d/%m/%Y') }}</p>
+            {% if report.paid_at %}
+            <p class="text-gray-500 ml-8 text-sm">Pagada el {{ report.paid_at.strftime('%d/%m/%Y %H:%M') }}</p>
+            {% endif %}
             {% if report.description %}
             <p class="text-gray-700 mt-2 ml-8 italic text-sm">"{{ report.description }}"</p>
             {% endif %}
@@ -129,6 +134,16 @@
             </div>
             {% endif %}
 
+            {% if can_mark_report_paid %}
+            <form action="{{ url_for('reports.mark_paid', id=report.id) }}" method="POST" class="w-full sm:w-auto"
+                onsubmit="return confirm('Esta rendición se marcará como pagada y cerrará la devolución al empleado. ¿Continuar?');">
+                <button type="submit"
+                    class="btn bg-emerald-600 text-white hover:bg-emerald-700 w-full sm:w-auto shadow-md">
+                    <span class="i-heroicons-banknotes mr-2"></span> Marcar Pagada
+                </button>
+            </form>
+            {% endif %}
+
             <!-- Botón Exportar PDF -->
             {% if report.status in ['approved', 'paid'] %}
             <a href="{{ url_for('reports.export_pdf', id=report.id) }}"
@@ -221,10 +236,10 @@
                 </div>
                 <div class="flex-1 text-right flex flex-col items-end">
                     <div
-                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if report.status == 'approved' else 'bg-gray-300' }} mb-1">
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if report.status in ['approved', 'paid'] else 'bg-gray-300' }} mb-1">
                     </div>
                     <span
-                        class="text-[9px] {{ 'text-success' if report.status == 'approved' else 'text-gray-400' }}">Aprobado</span>
+                        class="text-[9px] {{ 'text-success' if report.status in ['approved', 'paid'] else 'text-gray-400' }}">{{ 'Pagada' if report.status == 'paid' else 'Aprobado' }}</span>
                 </div>
             </div>
             {% else %}
@@ -241,7 +256,7 @@
 
                 {% for step in report.approval_flow.steps %}
                 <div class="flex-1 flex flex-col items-center">
-                    {% set is_past = report.current_step > step.step_number or report.status == 'approved' %}
+                    {% set is_past = report.current_step > step.step_number or report.status in ['approved', 'paid'] %}
                     {% set is_current = report.current_step == step.step_number and report.status in ['in_review', 'under_review'] %}
                     {% set is_waiting_info = report.current_step == step.step_number and report.status == 'needs_info' %}
                     <div
@@ -258,10 +273,10 @@
                 <!-- Paso Final -->
                 <div class="flex-none w-12 text-right flex flex-col items-end">
                     <div
-                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' if report.status == 'approved' else 'bg-gray-200' }} mb-1">
+                        class="w-2.5 h-2.5 rounded-full {{ 'bg-success shadow-[0_0_8px_rgba(34,197,94,0.5)]' if report.status in ['approved', 'paid'] else 'bg-gray-200' }} mb-1">
                     </div>
                     <span
-                        class="text-[8px] uppercase font-bold {{ 'text-success' if report.status == 'approved' else 'text-gray-400' }}">Fin</span>
+                        class="text-[8px] uppercase font-bold {{ 'text-success' if report.status in ['approved', 'paid'] else 'text-gray-400' }}">{{ 'Pagada' if report.status == 'paid' else 'Fin' }}</span>
                 </div>
             </div>
             {% endif %}

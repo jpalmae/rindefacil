@@ -90,6 +90,31 @@
                 </div>
             </div>
 
+            <div class="rounded-2xl border border-gray-100 bg-gray-50/70 p-5">
+                <h2 class="text-sm font-bold text-gray-900 uppercase tracking-widest mb-4">Permisos de Finanzas</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox" name="can_view_approved_reports" value="1"
+                            {% if user and user.can_view_approved_reports %}checked{% endif %}
+                            class="mt-1 rounded border-gray-300 text-primary focus:ring-primary">
+                        <span>
+                            <span class="block text-sm font-semibold text-gray-900">Ver rendiciones aprobadas</span>
+                            <span class="block text-xs text-gray-500">Permite ver las rendiciones aprobadas y pagadas de toda la empresa, incluidas las de tarjeta corporativa.</span>
+                        </span>
+                    </label>
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox" name="can_mark_reimbursements_paid" value="1"
+                            {% if user and user.can_mark_reimbursements_paid %}checked{% endif %}
+                            class="mt-1 rounded border-gray-300 text-primary focus:ring-primary">
+                        <span>
+                            <span class="block text-sm font-semibold text-gray-900">Marcar devoluciones como pagadas</span>
+                            <span class="block text-xs text-gray-500">Permite cerrar como pagadas solo las rendiciones aprobadas de tipo solicitud de devolución.</span>
+                        </span>
+                    </label>
+                </div>
+                <p class="mt-4 text-[11px] text-gray-500">Un usuario puede mantener su rol principal actual y además tener permisos de Finanzas.</p>
+            </div>
+
             <div class="pt-6 border-t border-gray-100 flex justify-end gap-3">
                 <a href="{{ url_for('admin.users') }}" class="btn-outline">Cancelar</a>
                 <button type="submit" class="btn-primary">

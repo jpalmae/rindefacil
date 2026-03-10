@@ -6,8 +6,14 @@
 <div class="py-4">
     <div class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">Mis Rendiciones</h1>
-            <p class="text-gray-500">Agrupa tus gastos y envíalos a aprobación</p>
+            <h1 class="text-2xl font-bold text-gray-900">{{ 'Rendiciones' if current_user.has_finance_report_access else 'Mis Rendiciones' }}</h1>
+            <p class="text-gray-500">
+                {% if current_user.has_finance_report_access and not (current_user.has_role('admin') or current_user.has_role('manager')) %}
+                Incluye tus rendiciones y las aprobadas o pagadas visibles para Finanzas.
+                {% else %}
+                Agrupa tus gastos y envíalos a aprobación
+                {% endif %}
+            </p>
         </div>
         <a href="{{ url_for('reports.new') }}" class="btn-primary">
             + Nueva Rendición
@@ -67,6 +73,8 @@
                                 <span class="badge bg-blue-100 text-blue-800">En revisión</span>
                                 {% elif report.status == 'approved' %}
                                 <span class="badge-green">Aprobado</span>
+                                {% elif report.status == 'paid' %}
+                                <span class="badge border border-emerald-200 bg-emerald-50 text-emerald-700">Pagada</span>
                                 {% else %}
                                 <span class="badge-red">{{ report.status | capitalize }}</span>
                                 {% endif %}
@@ -101,6 +109,8 @@
                             <span class="badge bg-amber-100 text-amber-800 !text-[10px] !px-2 !py-0.5">Antecedentes solicitados</span>
                             {% elif report.status == 'approved' %}
                             <span class="badge-green !text-[10px] !px-2 !py-0.5">Aprobado</span>
+                            {% elif report.status == 'paid' %}
+                            <span class="badge border border-emerald-200 bg-emerald-50 text-emerald-700 !text-[10px] !px-2 !py-0.5">Pagada</span>
                             {% elif report.status == 'rejected' %}
                             <span class="badge-red !text-[10px] !px-2 !py-0.5">Rechazado</span>
                             {% elif report.status in ['submitted', 'in_review', 'under_review'] %}
