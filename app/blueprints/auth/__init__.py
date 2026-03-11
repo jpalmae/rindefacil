@@ -178,13 +178,22 @@ def _notification_target_is_available(notification):
 @login_required
 def notifications():
     notifications_list = current_user.notifications.order_by(Notification.created_at.desc()).all()
-    unread_notifications = [notification for notification in notifications_list if not notification.is_read]
+    return render_template('auth/notifications.html', notifications=notifications_list)
+
+
+@auth_bp.route('/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notifications_read():
+    unread_notifications = current_user.notifications.filter_by(is_read=False).all()
     if unread_notifications:
         for notification in unread_notifications:
             notification.is_read = True
         db.session.commit()
+        flash('Todas las notificaciones quedaron marcadas como leídas.', 'success')
+    else:
+        flash('No tienes notificaciones pendientes por marcar.', 'info')
 
-    return render_template('auth/notifications.html', notifications=notifications_list)
+    return redirect(url_for('auth.notifications'))
 
 
 @auth_bp.route('/notifications/<uuid:notification_id>/open')

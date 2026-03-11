@@ -63,7 +63,7 @@ def create_app(config_name=None):
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
             unread_count = notifications_q.filter_by(is_read=False).count()
-            last_notifications = notifications_q.order_by(Notification.created_at.desc()).limit(5).all()
+            last_notifications = notifications_q.filter_by(is_read=False).order_by(Notification.created_at.desc()).limit(5).all()
 
             company_settings = current_user.company.settings or {}
             brand_app_name = company_settings.get('brand_app_name') or brand_app_name
