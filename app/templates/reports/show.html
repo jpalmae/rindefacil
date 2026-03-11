@@ -352,6 +352,12 @@
                                 <p class="mt-2 text-sm text-gray-900">{{ expense.receipt_time.strftime('%H:%M') if expense.receipt_time else 'No informada' }}</p>
                             </div>
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha de Rendición</p>
+                                <p class="mt-2 text-sm text-gray-900">
+                                    {{ expense.gps_captured_at.strftime('%d/%m/%Y %H:%M') if expense.gps_captured_at else expense.created_at.strftime('%d/%m/%Y %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Validación GPS</p>
                                 <div class="mt-2 flex items-center gap-2">
                                     {% if expense.gps_validation_status == 'match' %}
