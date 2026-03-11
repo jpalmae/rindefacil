@@ -49,6 +49,33 @@ def _can_mark_report_paid(report):
     )
 
 
+def _can_user_approve_report(report, user=None):
+    user = user or current_user
+    if report.company_id != user.company_id or report.status not in REVIEW_STATUSES:
+        return False
+
+    if user.has_role('admin'):
+        return True
+
+    if not report.approval_flow_id:
+        return user.has_role('manager')
+
+    current_step_obj = next(
+        (step for step in report.approval_flow.steps if step.step_number == report.current_step),
+        None,
+    )
+    if not current_step_obj:
+        return False
+
+    if current_step_obj.approver_type == 'role':
+        return user.has_role(current_step_obj.approver_target)
+    if current_step_obj.approver_type == 'user':
+        return str(user.id) == current_step_obj.approver_target
+    if current_step_obj.approver_type == 'manager':
+        return report.user.manager_id == user.id
+    return False
+
+
 def _recalculate_report_total(report_id):
     total = db.session.query(
         func.coalesce(func.sum(Expense.amount), Decimal("0"))
@@ -80,19 +107,47 @@ def _select_approval_flow(company_id, total_amount):
 @reports_bp.route('/')
 @login_required
 def index():
-    base_query = Report.query.options(joinedload(Report.user))
+    scope = (request.args.get('scope') or '').strip().lower()
+    base_query = Report.query.options(
+        joinedload(Report.user),
+        joinedload(Report.approval_flow).selectinload(ApprovalFlow.steps),
+    )
+
+    report_views = {}
+    default_scope = 'mine'
+
     if current_user.has_role('admin') or current_user.has_role('manager'):
-        reports = base_query.filter_by(company_id=current_user.company_id).order_by(Report.created_at.desc()).all()
+        company_reports = base_query.filter_by(company_id=current_user.company_id).order_by(Report.created_at.desc()).all()
+        report_views = {
+            'pending': [report for report in company_reports if _can_user_approve_report(report)],
+            'mine': [report for report in company_reports if report.user_id == current_user.id],
+            'all': company_reports,
+        }
+        if current_user.has_finance_report_access:
+            report_views['finance'] = [
+                report for report in company_reports
+                if report.user_id == current_user.id or report.status in FINANCE_VISIBLE_STATUSES
+            ]
+        default_scope = 'pending' if report_views['pending'] else 'mine'
     elif current_user.has_finance_report_access:
-        reports = base_query.filter(
+        finance_reports = base_query.filter(
             Report.company_id == current_user.company_id,
             or_(
                 Report.user_id == current_user.id,
                 Report.status.in_(FINANCE_VISIBLE_STATUSES),
             ),
         ).order_by(Report.created_at.desc()).all()
+        report_views = {
+            'mine': [report for report in finance_reports if report.user_id == current_user.id],
+            'finance': finance_reports,
+        }
+        default_scope = 'finance'
     else:
-        reports = base_query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
+        own_reports = base_query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
+        report_views = {'mine': own_reports}
+
+    current_scope = scope if scope in report_views else default_scope
+    reports = report_views.get(current_scope, [])
 
     report_ids = [r.id for r in reports]
     expense_counts = {}
@@ -105,7 +160,13 @@ def index():
             ).group_by(Expense.report_id).all()
         }
 
-    return render_template('reports/index.html', reports=reports, expense_counts=expense_counts)
+    return render_template(
+        'reports/index.html',
+        reports=reports,
+        expense_counts=expense_counts,
+        current_scope=current_scope,
+        report_views=report_views,
+    )
 
 @reports_bp.route('/new', methods=['GET', 'POST'])
 @login_required

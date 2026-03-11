@@ -3,22 +3,62 @@
 {% block title %}Rendiciones - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
+{% set report_views = report_views or {'mine': reports} %}
+{% set current_scope = current_scope or 'mine' %}
+{% set scope_labels = {
+    'pending': 'Pendientes de Mi Aprobacion',
+    'mine': 'Mis Rendiciones',
+    'all': 'Todas las Rendiciones',
+    'finance': 'Vista Finanzas'
+} %}
+{% set scope_descriptions = {
+    'pending': 'Rendiciones que estan esperando tu decision en el paso actual del flujo.',
+    'mine': 'Rendiciones creadas por ti.',
+    'all': 'Vista completa de rendiciones visibles para tu rol.',
+    'finance': 'Rendiciones aprobadas o pagadas visibles para Finanzas, incluyendo las tuyas.'
+} %}
 <div class="py-4">
     <div class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">{{ 'Rendiciones' if current_user.has_finance_report_access else 'Mis Rendiciones' }}</h1>
-            <p class="text-gray-500">
-                {% if current_user.has_finance_report_access and not (current_user.has_role('admin') or current_user.has_role('manager')) %}
-                Incluye tus rendiciones y las aprobadas o pagadas visibles para Finanzas.
-                {% else %}
-                Agrupa tus gastos y envíalos a aprobación
-                {% endif %}
-            </p>
+            <h1 class="text-2xl font-bold text-gray-900">{{ scope_labels.get(current_scope, 'Rendiciones') }}</h1>
+            <p class="text-gray-500">{{ scope_descriptions.get(current_scope, 'Agrupa tus gastos y envíalos a aprobación.') }}</p>
         </div>
         <a href="{{ url_for('reports.new') }}" class="btn-primary">
             + Nueva Rendición
         </a>
     </div>
+
+    {% if report_views|length > 1 %}
+    <div class="mb-5 flex flex-wrap gap-2">
+        {% if 'pending' in report_views %}
+        <a href="{{ url_for('reports.index', scope='pending') }}"
+            class="{{ 'btn-primary' if current_scope == 'pending' else 'btn-outline' }}">
+            Pendientes de Mi Aprobación
+            {% if report_views['pending'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_scope == 'pending' else 'text-primary' }}">{{ report_views['pending']|length }}</span>
+            {% endif %}
+        </a>
+        {% endif %}
+        {% if 'mine' in report_views %}
+        <a href="{{ url_for('reports.index', scope='mine') }}"
+            class="{{ 'btn-primary' if current_scope == 'mine' else 'btn-outline' }}">
+            Mis Rendiciones
+        </a>
+        {% endif %}
+        {% if 'all' in report_views %}
+        <a href="{{ url_for('reports.index', scope='all') }}"
+            class="{{ 'btn-primary' if current_scope == 'all' else 'btn-outline' }}">
+            Todas
+        </a>
+        {% endif %}
+        {% if 'finance' in report_views %}
+        <a href="{{ url_for('reports.index', scope='finance') }}"
+            class="{{ 'btn-primary' if current_scope == 'finance' else 'btn-outline' }}">
+            Finanzas
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
 
     <div class="mt-4">
         {% if reports %}
