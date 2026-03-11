@@ -138,7 +138,7 @@
             <form action="{{ url_for('reports.mark_paid', id=report.id) }}" method="POST" class="w-full sm:w-auto"
                 onsubmit="return confirm('Esta rendición se marcará como pagada y cerrará la devolución al empleado. ¿Continuar?');">
                 <button type="submit"
-                    class="btn bg-emerald-600 text-white hover:bg-emerald-700 w-full sm:w-auto shadow-md">
+                    class="btn bg-success text-white hover:bg-success-dark w-full sm:w-auto shadow-md">
                     <span class="i-heroicons-banknotes mr-2"></span> Marcar Pagada
                 </button>
             </form>
