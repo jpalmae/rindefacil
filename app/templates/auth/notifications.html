@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Notificaciones - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-4 max-w-5xl mx-auto px-4 sm:px-0">
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Notificaciones</h1>
+            <p class="text-gray-500">Se marcan como leídas al entrar a esta vista.</p>
+        </div>
+        <a href="{{ url_for('dashboard.index') }}" class="btn-outline">Volver al inicio</a>
+    </div>
+
+    {% if notifications %}
+    <div class="space-y-3">
+        {% for notification in notifications %}
+        {% set is_available = not notification.link or ('/reports/' not in notification.link) %}
+        <div class="card-compact border border-gray-100">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div class="flex gap-3 min-w-0 flex-1">
+                    <div
+                        class="flex-shrink-0 w-10 h-10 rounded-full {{ 'bg-blue-100 text-blue-600' if 'approval' in notification.type else ('bg-amber-100 text-amber-700' if 'info' in notification.type else 'bg-green-100 text-green-600') }} flex items-center justify-center">
+                        <span
+                            class="{{ 'i-heroicons-hand-thumb-up' if 'approved' in notification.type else ('i-heroicons-document-text' if 'pending' in notification.type else ('i-heroicons-document-magnifying-glass' if 'info' in notification.type else 'i-heroicons-information-circle')) }} text-base"></span>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h2 class="text-base font-bold text-gray-900">{{ notification.title }}</h2>
+                            {% if not notification.is_read %}
+                            <span class="badge border border-primary/20 bg-primary-light text-primary">Nueva</span>
+                            {% else %}
+                            <span class="badge border border-gray-200 bg-gray-50 text-gray-600">Leída</span>
+                            {% endif %}
+                        </div>
+                        <p class="mt-1 text-sm text-gray-600 leading-relaxed">{{ notification.message }}</p>
+                        <p class="mt-2 text-xs text-gray-400">{{ notification.created_at.strftime('%d/%m/%Y %H:%M') if notification.created_at else '' }}</p>
+                    </div>
+                </div>
+                <div class="flex-shrink-0">
+                    {% if notification.link %}
+                    <a href="{{ url_for('auth.open_notification', notification_id=notification.id) }}"
+                        class="btn-outline !py-2 !px-3 !text-xs">
+                        Abrir
+                    </a>
+                    {% else %}
+                    <span class="text-xs text-gray-400">Sin destino</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card text-center py-12">
+        <span class="i-heroicons-bell-slash text-5xl text-gray-200 block mx-auto mb-3"></span>
+        <p class="text-gray-500">No tienes notificaciones.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

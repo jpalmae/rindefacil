@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import login_user, logout_user, login_required, current_user
@@ -7,6 +8,8 @@ from app.extensions import db
 from app.models.company import Company
 from app.models.user import User, UserRole
 from app.models.api_key import UserApiKey
+from app.models.notification import Notification
+from app.models.report import Report
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -157,6 +160,50 @@ def logout():
 @login_required
 def user_guide():
     return render_template('auth/user_guide.html')
+
+
+def _notification_target_is_available(notification):
+    if not notification.link:
+        return False
+
+    path = urlparse(notification.link).path or ''
+    parts = [part for part in path.split('/') if part]
+    if len(parts) >= 2 and parts[0] == 'reports':
+        return Report.query.filter_by(id=parts[1]).first() is not None
+
+    return True
+
+
+@auth_bp.route('/notifications')
+@login_required
+def notifications():
+    notifications_list = current_user.notifications.order_by(Notification.created_at.desc()).all()
+    unread_notifications = [notification for notification in notifications_list if not notification.is_read]
+    if unread_notifications:
+        for notification in unread_notifications:
+            notification.is_read = True
+        db.session.commit()
+
+    return render_template('auth/notifications.html', notifications=notifications_list)
+
+
+@auth_bp.route('/notifications/<uuid:notification_id>/open')
+@login_required
+def open_notification(notification_id):
+    notification = Notification.query.filter_by(id=notification_id, user_id=current_user.id).first_or_404()
+    if not notification.is_read:
+        notification.is_read = True
+        db.session.commit()
+
+    if not notification.link:
+        flash('La notificación no tiene un destino asociado.', 'warning')
+        return redirect(url_for('auth.notifications'))
+
+    if not _notification_target_is_available(notification):
+        flash('La notificación apunta a un elemento que ya no existe.', 'warning')
+        return redirect(url_for('auth.notifications'))
+
+    return redirect(notification.link)
 
 @auth_bp.route('/profile', methods=['GET', 'POST'])
 @login_required

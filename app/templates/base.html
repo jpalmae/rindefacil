@@ -379,7 +379,7 @@
                                 </div>
                                 {% else %}
                                 {% for n in last_notifications %}
-                                <a href="{{ n.link or '#' }}"
+                                <a href="{{ url_for('auth.open_notification', notification_id=n.id) }}"
                                     class="block px-4 py-4 hover:bg-gray-50 border-b border-gray-50 last:border-0 transition-colors">
                                     <div class="flex gap-3">
                                         <div
@@ -402,7 +402,7 @@
                                 {% endfor %}
                                 {% endif %}
                             </div>
-                            <a href="#"
+                            <a href="{{ url_for('auth.notifications') }}"
                                 class="block py-2 text-center text-xs font-bold text-primary bg-gray-50 border-t border-gray-100 hover:bg-gray-100">Ver
                                 todas</a>
                         </div>
