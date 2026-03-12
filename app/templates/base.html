@@ -81,6 +81,24 @@
             --floating-bg: rgba(16, 26, 46, 0.92);
         }
 
+        [data-theme="rose"] {
+            --bg-base: #fff3f8;
+            --bg-soft: #fff8fb;
+            --surface-1: #fffdfd;
+            --text-1: #4c1732;
+            --text-2: #71455a;
+            --text-muted: #a06f84;
+            --line: #f1d4e1;
+            --primary: #d14d87;
+            --primary-700: #b5366f;
+            --primary-soft: #ffe2ef;
+            --ring: rgba(209, 77, 135, 0.32);
+            --card-shadow: 0 18px 32px -24px rgba(120, 31, 73, 0.22);
+            --card-shadow-hover: 0 28px 42px -24px rgba(120, 31, 73, 0.3);
+            --nav-bg: rgba(255, 250, 252, 0.9);
+            --floating-bg: rgba(255, 252, 253, 0.96);
+        }
+
         html,
         body {
             min-height: 100%;
@@ -251,7 +269,7 @@
             }
         },
         applyTheme(nextTheme, persist = true) {
-            const allowed = ['executive', 'paper', 'midnight'];
+            const allowed = ['executive', 'paper', 'midnight', 'rose'];
             const resolved = allowed.includes(nextTheme) ? nextTheme : 'executive';
             this.theme = resolved;
             document.documentElement.setAttribute('data-theme', resolved);
@@ -259,6 +277,7 @@
                 executive: '#0f766e',
                 paper: '#9a5d21',
                 midnight: '#0a1222',
+                rose: '#d14d87',
             };
             const themeMeta = document.querySelector('meta[name=theme-color]');
             if (themeMeta && colors[resolved]) {
@@ -417,6 +436,7 @@
                                 <option value="executive">Executive</option>
                                 <option value="paper">Paper</option>
                                 <option value="midnight">Midnight</option>
+                                <option value="rose">Rose</option>
                             </select>
                         </div>
                     </div>
