@@ -2,7 +2,7 @@ from app.models.company import Company
 from app.models.user import User, UserRole
 from app.models.category import Category
 from app.models.cost_center import CostCenter
-from app.models.expense import Expense, ExpenseStatus, ExpenseType
+from app.models.expense import Expense, ExpenseStatus, ExpenseType, ExpenseCurrency
 from app.models.report import Report, ReportSettlementType, ReportStatus
 from app.models.policy import Policy
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
@@ -18,6 +18,7 @@ __all__ = [
     'CostCenter',
     'Category',
     'Expense',
+    'ExpenseCurrency',
     'ExpenseStatus',
     'ExpenseType',
     'Report',

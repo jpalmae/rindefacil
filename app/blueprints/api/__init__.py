@@ -2,7 +2,7 @@ import os
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from functools import wraps
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from app.models import (
     AuditLog,
     Category,
     Expense,
+    ExpenseCurrency,
     ExpenseStatus,
     Policy,
     Report,
@@ -211,6 +212,23 @@ def _parse_non_negative_decimal(value):
     return parsed
 
 
+def _normalize_currency(value):
+    currency = (str(value).strip().upper() if value is not None else ExpenseCurrency.CLP) or ExpenseCurrency.CLP
+    if currency not in ExpenseCurrency.CHOICES:
+        return None
+    return currency
+
+
+def _compute_amount_clp(amount, currency, exchange_rate):
+    if amount is None:
+        return None
+    if currency == ExpenseCurrency.CLP:
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if exchange_rate is None or exchange_rate <= 0:
+        return None
+    return (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _parse_time(value):
     if value is None:
         return None
@@ -275,6 +293,8 @@ def _serialize_expense(expense):
         "report_id": str(expense.report_id) if expense.report_id else None,
         "amount": _decimal_as_text(expense.amount),
         "currency": expense.currency,
+        "exchange_rate": _decimal_as_text(expense.exchange_rate),
+        "amount_clp": _decimal_as_text(expense.amount_clp),
         "date": expense.date.isoformat() if expense.date else None,
         "receipt_time": expense.receipt_time.isoformat() if expense.receipt_time else None,
         "merchant": expense.merchant,
@@ -444,6 +464,7 @@ def _append_duplicate_flags(expense):
         existing_data = Expense.query.filter(
             Expense.company_id == expense.company_id,
             Expense.amount == expense.amount,
+            Expense.currency == expense.currency,
             Expense.date == expense.date,
             Expense.id != expense.id,
         ).first()
@@ -462,9 +483,9 @@ def _policy_warnings_for_expense(expense):
     max_amount = rules.get("max_amount")
     if max_amount is not None:
         try:
-            if expense.amount > Decimal(str(max_amount)):
+            if expense.amount_clp > Decimal(str(max_amount)):
                 warnings.append(
-                    f"El monto excede el maximo permitido por politica ({_decimal_as_text(max_amount)})."
+                    f"El monto equivalente en CLP excede el maximo permitido por politica ({_decimal_as_text(max_amount)})."
                 )
         except (InvalidOperation, ValueError):
             pass
@@ -762,6 +783,8 @@ def expenses_create():
     analyze_receipt = str(data.get("analyze_receipt", "true")).lower() in {"1", "true", "yes", "on"}
 
     amount = _parse_amount(data.get("amount"))
+    currency = _normalize_currency(data.get("currency"))
+    exchange_rate = _parse_non_negative_decimal(data.get("exchange_rate"))
     merchant = (data.get("merchant") or "").strip() or None
     client_partner = (data.get("client_partner") or "").strip() or None
     description = (data.get("description") or "").strip()
@@ -811,6 +834,23 @@ def expenses_create():
 
     if amount is None or amount <= 0:
         return _error("Monto invalido. Envia 'amount' o una boleta legible para OCR.", status=422, code="validation_error")
+
+    if currency is None:
+        return _error("Debes enviar una currency valida (CLP o USD).", status=422, code="validation_error")
+
+    if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
+        return _error(
+            "Debes enviar exchange_rate valido para gastos en USD.",
+            status=422,
+            code="validation_error",
+        )
+
+    if currency == ExpenseCurrency.CLP:
+        exchange_rate = Decimal("1")
+
+    amount_clp = _compute_amount_clp(amount, currency, exchange_rate)
+    if amount_clp is None or amount_clp <= 0:
+        return _error("No fue posible calcular el monto en CLP.", status=422, code="validation_error")
 
     if not date_value:
         return _error("Fecha invalida. Usa formato YYYY-MM-DD.", status=422, code="validation_error")
@@ -866,6 +906,9 @@ def expenses_create():
             user_id=user.id,
             company_id=user.company_id,
             amount=amount,
+            currency=currency,
+            exchange_rate=exchange_rate,
+            amount_clp=amount_clp,
             merchant=merchant,
             client_partner=client_partner,
             date=date_value,
@@ -920,7 +963,7 @@ def expenses_create():
             action="api_expense_created",
             entity_type="expense",
             entity_id=expense.id,
-            description=f"Gasto creado via API por {_decimal_as_text(expense.amount)} {expense.currency}",
+            description=f"Gasto creado via API por {_decimal_as_text(expense.amount)} {expense.currency} (CLP {_decimal_as_text(expense.amount_clp)})",
         )
 
         db.session.commit()
@@ -1059,7 +1102,7 @@ def reports_create():
         total = Decimal("0")
         for expense in expenses:
             expense.report_id = report.id
-            total += Decimal(str(expense.amount))
+            total += Decimal(str(expense.amount_clp or expense.amount or 0))
 
         report.total_amount = total
 

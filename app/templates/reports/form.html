@@ -22,7 +22,7 @@
         selectedExpenses: [],
         expensesData: {
             {% for e in expenses %}
-            '{{ e.id }}': {{ e.amount }},
+            '{{ e.id }}': {{ e.amount_clp or e.amount }},
             {% endfor %}
         },
         get total() {
@@ -67,7 +67,7 @@
                                 <span class="font-bold text-gray-900" x-text="selectedExpenses.length"></span>
                             </div>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="text-gray-700 font-medium">Total Rendición:</span>
+                                <span class="text-gray-700 font-medium">Total Rendición (CLP):</span>
                                 <span class="text-2xl font-black text-primary">$<span
                                         x-text="total.toLocaleString('es-CL')"></span></span>
                             </div>
@@ -104,8 +104,13 @@
                                         <div class="text-xs text-gray-400 mt-0.5">{{ expense.date.strftime('%d/%m/%Y')
                                             }}</div>
                                     </div>
-                                    <div class="text-lg font-black text-gray-900">
+                                    <div class="text-lg font-black text-gray-900 text-right">
+                                        {% if expense.currency == 'USD' %}
+                                        USD {{ "{:,.2f}".format(expense.amount) }}
+                                        <div class="text-[10px] font-medium text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                                        {% else %}
                                         ${{ "{:,.0f}".format(expense.amount) }}
+                                        {% endif %}
                                     </div>
                                 </div>
                             </div>

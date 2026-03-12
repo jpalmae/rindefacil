@@ -15,6 +15,16 @@ class ExpenseType:
     PER_DIEM = 'per_diem'
     ADVANCE = 'advance'
 
+
+class ExpenseCurrency:
+    CLP = 'CLP'
+    USD = 'USD'
+
+    CHOICES = {
+        CLP: 'Peso chileno (CLP)',
+        USD: 'USD Dollar',
+    }
+
 class Expense(db.Model):
     __tablename__ = 'expenses'
 
@@ -28,6 +38,7 @@ class Expense(db.Model):
     amount = db.Column(db.Numeric(14, 2), nullable=False)
     currency = db.Column(db.String(3), default='CLP')
     exchange_rate = db.Column(db.Numeric(10, 4), default=1)
+    amount_clp = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     date = db.Column(db.Date, nullable=False)
     receipt_time = db.Column(db.Time)
     description = db.Column(db.Text)
@@ -67,6 +78,10 @@ class Expense(db.Model):
 
     # Self reference for duplicates
     duplicate_of = db.relationship('Expense', remote_side=[id], backref='duplicated_by')
+
+    @property
+    def is_foreign_currency(self):
+        return (self.currency or ExpenseCurrency.CLP) != ExpenseCurrency.CLP
 
     @property
     def public_id(self):

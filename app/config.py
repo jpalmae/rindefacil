@@ -30,6 +30,7 @@ class Config:
     APP_NAME = os.environ.get('APP_NAME', 'Rinde Fácil')
     APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
     TEMP_PASSWORD = os.environ.get('TEMP_PASSWORD', 'Sixman123.,')
+    CMF_API_KEY = os.environ.get('CMF_API_KEY')
 
 
 class DevelopmentConfig(Config):

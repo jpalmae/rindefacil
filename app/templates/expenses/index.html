@@ -68,7 +68,12 @@
                                 {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
+                                {% if expense.currency == 'USD' %}
+                                USD {{ "{:,.2f}".format(expense.amount) }}
+                                <div class="text-[10px] font-medium text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                                {% else %}
                                 ${{ "{:,.0f}".format(expense.amount) }}
+                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                 {% if expense.status == 'draft' %}
@@ -183,7 +188,12 @@
                         {% endif %}
                     </div>
                     <div class="text-xl font-black text-gray-900 tracking-tight">
+                        {% if expense.currency == 'USD' %}
+                        USD {{ "{:,.2f}".format(expense.amount) }}
+                        <div class="text-[10px] font-medium text-gray-500 mt-1 text-right">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                        {% else %}
                         ${{ "{:,.0f}".format(expense.amount) }}
+                        {% endif %}
                     </div>
                 </div>
                 <div class="mt-4 flex justify-end">

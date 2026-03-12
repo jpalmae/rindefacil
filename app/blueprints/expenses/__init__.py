@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import os
 import re
 
@@ -10,8 +10,9 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.category import Category
-from app.models.expense import Expense, ExpenseStatus
+from app.models.expense import Expense, ExpenseCurrency, ExpenseStatus
 from app.services.audit_service import log_action
+from app.services.exchange_rate_service import get_usd_exchange_rate_for_date
 from app.services.location_service import evaluate_expense_integrity, reverse_geocode
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
@@ -125,6 +126,23 @@ def _parse_non_negative_decimal(value):
     return parsed
 
 
+def _normalize_currency(value):
+    currency = (str(value).strip().upper() if value is not None else ExpenseCurrency.CLP) or ExpenseCurrency.CLP
+    if currency not in ExpenseCurrency.CHOICES:
+        return None
+    return currency
+
+
+def _compute_amount_clp(amount, currency, exchange_rate):
+    if amount is None:
+        return None
+    if currency == ExpenseCurrency.CLP:
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if exchange_rate is None or exchange_rate <= 0:
+        return None
+    return (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def _parse_iso_datetime(value):
     if value is None:
         return None
@@ -219,6 +237,8 @@ def new():
     if request.method == 'POST':
         amount_raw = request.form.get('amount')
         amount = _parse_amount(amount_raw)
+        currency = _normalize_currency(request.form.get('currency'))
+        exchange_rate = _parse_non_negative_decimal(request.form.get('exchange_rate'))
         merchant = request.form.get('merchant')
         client_partner = request.form.get('client_partner')
         date_str = request.form.get('date')
@@ -251,6 +271,32 @@ def new():
             flash('El monto ingresado no es válido.', 'danger')
             return redirect(url_for('expenses.new'))
 
+        if currency is None:
+            flash('La moneda seleccionada no es válida.', 'danger')
+            return redirect(url_for('expenses.new'))
+
+        auto_rate_date = None
+        if date_str:
+            try:
+                auto_rate_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                auto_rate_date = None
+
+        if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
+            auto_rate = get_usd_exchange_rate_for_date(auto_rate_date) if auto_rate_date else None
+            exchange_rate = auto_rate['exchange_rate'] if auto_rate else None
+            if exchange_rate is None or exchange_rate <= 0:
+                flash('Debes ingresar un tipo de cambio válido para gastos en USD.', 'danger')
+                return redirect(url_for('expenses.new'))
+
+        if currency == ExpenseCurrency.CLP:
+            exchange_rate = Decimal('1')
+
+        amount_clp = _compute_amount_clp(amount, currency, exchange_rate)
+        if amount_clp is None or amount_clp <= 0:
+            flash('No fue posible calcular el monto en CLP para este gasto.', 'danger')
+            return redirect(url_for('expenses.new'))
+
         try:
             expense_date = datetime.strptime(date_str, '%Y-%m-%d').date()
 
@@ -275,6 +321,9 @@ def new():
                 user_id=current_user.id,
                 company_id=current_user.company_id,
                 amount=amount,
+                currency=currency,
+                exchange_rate=exchange_rate,
+                amount_clp=amount_clp,
                 merchant=merchant,
                 client_partner=client_partner,
                 date=expense_date,
@@ -327,6 +376,7 @@ def new():
                 existing_data = Expense.query.filter(
                     Expense.company_id == current_user.company_id,
                     Expense.amount == amount,
+                    Expense.currency == currency,
                     Expense.date == expense_date,
                     Expense.id != expense.id,
                 ).first()
@@ -341,9 +391,9 @@ def new():
             company_policy = Policy.query.filter_by(company_id=current_user.company_id, is_active=True).first()
             if company_policy and 'max_amount' in company_policy.rules:
                 max_amt = float(company_policy.rules['max_amount'])
-                if float(amount) > max_amt:
+                if float(amount_clp) > max_amt:
                     flash(
-                        f'El monto excede el límite permitido por la política de su empresa (${max_amt:,.0f}). Guardado como borrador con advertencia.',
+                        f'El monto equivalente en CLP excede el límite permitido por la política de su empresa (${max_amt:,.0f}). Guardado como borrador con advertencia.',
                         'warning',
                     )
 
@@ -375,7 +425,7 @@ def new():
                 action='expense_created',
                 entity_type='expense',
                 entity_id=expense.id,
-                description=f"Gasto creado por {expense.amount} {expense.currency} en {expense.merchant}",
+                description=f"Gasto creado por {expense.amount} {expense.currency} (CLP {expense.amount_clp}) en {expense.merchant}",
             )
 
             flash('Gasto creado exitosamente.', 'success')
@@ -385,7 +435,12 @@ def new():
             db.session.rollback()
             flash(f'Error al crear gasto: {str(e)}', 'danger')
 
-    return render_template('expenses/form.html', categories=categories)
+    return render_template(
+        'expenses/form.html',
+        categories=categories,
+        currency_options=ExpenseCurrency.CHOICES,
+        default_currency=ExpenseCurrency.CLP,
+    )
 
 
 @expenses_bp.route('/extract-data', methods=['POST'])
@@ -460,3 +515,31 @@ def reverse_geocode_lookup():
 
     result = reverse_geocode(float(latitude), float(longitude))
     return jsonify({'address': result.get('display_name') if result else None}), 200
+
+
+@expenses_bp.route('/exchange-rate', methods=['GET'])
+@login_required
+def exchange_rate_lookup():
+    currency = _normalize_currency(request.args.get('currency'))
+    date_raw = request.args.get('date')
+    if currency != ExpenseCurrency.USD:
+        return jsonify({'exchange_rate': '1', 'source': 'manual', 'date': date_raw}), 200
+
+    if not date_raw:
+        return jsonify({'error': 'Debes indicar fecha.'}), 400
+
+    try:
+        target_date = datetime.strptime(date_raw, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'Fecha inválida. Usa YYYY-MM-DD.'}), 400
+
+    result = get_usd_exchange_rate_for_date(target_date)
+    if not result:
+        return jsonify({'error': 'No fue posible obtener el tipo de cambio automático para esa fecha.'}), 404
+
+    return jsonify({
+        'exchange_rate': format(result['exchange_rate'], 'f'),
+        'source': result['source'],
+        'source_detail': result['source_detail'],
+        'date': result['date'].isoformat(),
+    }), 200

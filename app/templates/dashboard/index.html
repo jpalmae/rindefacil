@@ -14,10 +14,12 @@
         <div class="card bg-white border-l-4 border-gray-400">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Pdte. Rendir</h3>
             <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_draft) }}</p>
+            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
         </div>
         <div class="card bg-white border-l-4 border-success">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Aprobados Mes</h3>
             <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_approved) }}</p>
+            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
         </div>
         <div
             class="card bg-primary text-white shadow-lg shadow-primary/30 flex items-center justify-between group overflow-hidden relative">
@@ -93,8 +95,14 @@
                             <span class="text-gray-400">-</span>
                             {% endif %}
                         </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${{
-                            "{:,.0f}".format(expense.amount) }} {{ expense.currency }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            {% if expense.currency == 'USD' %}
+                            USD {{ "{:,.2f}".format(expense.amount) }}
+                            <div class="text-[10px] text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                            {% else %}
+                            ${{ "{:,.0f}".format(expense.amount) }} {{ expense.currency }}
+                            {% endif %}
+                        </td>
                         <td class="px-6 py-4 whitespace-nowrap">
                             {% if expense.status == 'draft' %}
                             <span class="badge-yellow">Borrador</span>

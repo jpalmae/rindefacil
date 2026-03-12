@@ -205,7 +205,7 @@
     <!-- Summary Widgets -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 border-l-4 border-primary">
-            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto</p>
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto (CLP)</p>
             <p class="text-2xl font-black text-primary mt-1">${{ "{:,.0f}".format(report.total_amount) }}</p>
         </div>
         <div class="card p-4">
@@ -310,7 +310,12 @@
 
                         <div class="flex flex-wrap items-center gap-2 lg:gap-4 lg:justify-end">
                             <div class="text-lg font-black text-gray-900 mr-auto lg:mr-0">
+                                {% if expense.currency == 'USD' %}
+                                USD {{ "{:,.2f}".format(expense.amount) }}
+                                <div class="text-[10px] font-medium text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                                {% else %}
                                 ${{ "{:,.0f}".format(expense.amount) }}
+                                {% endif %}
                             </div>
                             <button type="button" @click="open = !open"
                                 class="inline-flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-all">
@@ -350,6 +355,15 @@
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Hora Boleta</p>
                                 <p class="mt-2 text-sm text-gray-900">{{ expense.receipt_time.strftime('%H:%M') if expense.receipt_time else 'No informada' }}</p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Moneda</p>
+                                <p class="mt-2 text-sm text-gray-900">
+                                    {{ expense.currency }}
+                                    {% if expense.currency == 'USD' %}
+                                    · TC {{ expense.exchange_rate }}
+                                    {% endif %}
+                                </p>
                             </div>
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha de Rendición</p>

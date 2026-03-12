@@ -21,14 +21,14 @@ def index():
     ).order_by(Expense.created_at.desc()).limit(5).all()
     
     # Calcular totales del usuario actual
-    total_draft = db.session.query(func.sum(Expense.amount)).filter_by(user_id=current_user.id, status=ExpenseStatus.DRAFT).scalar() or 0
-    total_approved = db.session.query(func.sum(Expense.amount)).filter_by(user_id=current_user.id, status=ExpenseStatus.APPROVED).scalar() or 0
+    total_draft = db.session.query(func.sum(Expense.amount_clp)).filter_by(user_id=current_user.id, status=ExpenseStatus.DRAFT).scalar() or 0
+    total_approved = db.session.query(func.sum(Expense.amount_clp)).filter_by(user_id=current_user.id, status=ExpenseStatus.APPROVED).scalar() or 0
     
     # Analytics Corporativos (para el Admin/Manager)
     analytics_data = {}
     if current_user.has_role('admin') or current_user.has_role('manager'):
         # Gastos por Categoría
-        cat_stats = db.session.query(Category.name, func.sum(Expense.amount))\
+        cat_stats = db.session.query(Category.name, func.sum(Expense.amount_clp))\
             .join(Expense, Expense.category_id == Category.id)\
             .filter(Expense.company_id == current_user.company_id)\
             .group_by(Category.name).all()
@@ -37,7 +37,7 @@ def index():
         cc_data = db.session.query(
             CostCenter.name, 
             CostCenter.monthly_budget,
-            func.sum(Expense.amount).label('actual')
+            func.sum(Expense.amount_clp).label('actual')
         ).join(Expense, Expense.cost_center_id == CostCenter.id, isouter=True)\
          .filter(CostCenter.company_id == current_user.company_id)\
          .group_by(CostCenter.id, CostCenter.name, CostCenter.monthly_budget).all()

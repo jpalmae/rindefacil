@@ -103,7 +103,7 @@ def generate_report_pdf(report):
     Story.append(Paragraph(f"<b>Fecha de Solicitud:</b> {report.created_at.strftime('%d/%m/%Y')}", styles['Normal']))
     Story.append(Paragraph(f"<b>Estado:</b> {_report_status_label(report)}", styles['Normal']))
     Story.append(Paragraph(f"<b>Tipo:</b> {report.settlement_type_label}", styles['Normal']))
-    Story.append(Paragraph(f"<b>Monto Total:</b> ${report.total_amount:,.0f} {report.currency}", styles['Normal']))
+    Story.append(Paragraph(f"<b>Monto Total (CLP):</b> ${report.total_amount:,.0f} {report.currency}", styles['Normal']))
     Story.append(Spacer(1, 20))
     
     # Table Header
@@ -117,10 +117,10 @@ def generate_report_pdf(report):
             exp.date.strftime('%d/%m/%Y'),
             merchant,
             cat_name,
-            f"${exp.amount:,.0f}"
+            f"USD {exp.amount:,.2f} (CLP ${exp.amount_clp:,.0f})" if exp.currency == 'USD' else f"${exp.amount:,.0f}"
         ])
         
-    data.append(['', '', 'TOTAL:', f"${report.total_amount:,.0f}"])
+    data.append(['', '', 'TOTAL CLP:', f"${report.total_amount:,.0f}"])
     
     # Stylize Table
     t = Table(data, colWidths=[80, 200, 150, 80])

@@ -78,7 +78,7 @@ def _can_user_approve_report(report, user=None):
 
 def _recalculate_report_total(report_id):
     total = db.session.query(
-        func.coalesce(func.sum(Expense.amount), Decimal("0"))
+        func.coalesce(func.sum(Expense.amount_clp), Decimal("0"))
     ).filter(
         Expense.report_id == report_id
     ).scalar()
@@ -230,7 +230,7 @@ def new():
             total_amount = 0
             for exp in selected_expenses:
                 exp.report_id = report.id
-                total_amount += exp.amount
+                total_amount += Decimal(str(exp.amount_clp or exp.amount or 0))
             
             report.total_amount = total_amount
             db.session.commit()
