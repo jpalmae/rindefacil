@@ -5,8 +5,11 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 ## Funcionalidades principales
 
 - Gestión de gastos con adjunto de comprobante (imagen/PDF).
-- OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría).
+- OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría), incluyendo PDF convertido internamente a imagen para análisis.
+- Vista previa embebida del comprobante en el formulario, con apertura ampliada para imágenes y PDF.
 - Normalización de montos para formato local (CLP): separador de miles y decimales.
+- Soporte de gastos en CLP y USD con conversión a CLP para reportes, políticas, dashboard y aprobación.
+- Tipo de gasto `Vehículo particular` con cálculo automático por tramo y boleta opcional de combustible como respaldo.
 - Detección de duplicados por hash de imagen y por monto/fecha.
 - GPS obligatorio al crear gastos (captura de coordenadas + dirección aproximada).
 - Validación antifraude con score combinado (`match`, `partial`, `mismatch`):
@@ -19,7 +22,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
 - Branding por empresa: nombre de app, ícono, logo y dominio por defecto para emails de usuarios.
-- Selector de temas visuales (Executive / Paper / Midnight).
+- Selector de temas visuales (Executive / Paper / Midnight / Rose).
 - Guía funcional de uso integrada para usuarios desde `Mi Perfil`.
 
 ## Stack técnico
@@ -30,6 +33,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Geocodificación: OpenStreetMap Nominatim (reverse geocoding de coordenadas).
 - OCR IA: OpenRouter (SDK `openai`).
 - Exportación: ReportLab (PDF).
+- Procesamiento de primera página PDF para OCR/hash: `pypdfium2`.
 - Infra: Docker + Docker Compose.
 
 ## Requisitos
@@ -175,6 +179,11 @@ La aplicación separa tres conceptos:
 - `Rendición`: agrupación de uno o más gastos. Internamente el modelo se llama `Report`, pero en la UI corresponde a una rendición.
 - `Flujo de aprobación`: se ejecuta sobre la rendición, no sobre el gasto individual.
 
+Tipos de gasto soportados:
+
+- `receipt`: gasto normal con monto manual o autocompletado por OCR.
+- `mileage`: tramo en vehículo particular. Cada tramo se registra como un gasto independiente y luego se agrupa normalmente en una rendición.
+
 Cada rendición además tiene un `tipo`:
 
 - `employee_reimbursement`: solicitar devolución al empleado.
@@ -233,6 +242,7 @@ Cada flujo permite:
 Notas operativas:
 
 - El flujo se evalúa al enviar la rendición.
+- Si existen varios flujos aplicables, el sistema selecciona el de mayor `monto mínimo` y, en empate, el de más pasos.
 - Si el flujo no tiene pasos o no existe uno aplicable, la rendición permanece en borrador.
 - La aprobación afecta a la rendición y actualiza el estado de los gastos que contiene.
 - Un aprobador puede pedir antecedentes adicionales sin rechazar la rendición.
@@ -257,6 +267,43 @@ Módulos principales:
 - El endpoint de extracción es `POST /expenses/extract-data`.
 - Archivos se guardan localmente en `app/static/uploads`.
 - OCR intenta extraer fecha en formato regional `DD/MM/YYYY` y hora `HH:MM` cuando exista.
+- Si el comprobante es PDF, la app convierte la primera página a imagen para OCR y cálculo de hash.
+- El formulario muestra vista previa embebida del comprobante y permite abrirlo en modal ampliado.
+
+## Monedas y tipo de cambio
+
+- La moneda contable base es `CLP`.
+- Los gastos pueden registrarse en `CLP` o `USD`.
+- En gastos USD se guarda:
+  - monto original en USD,
+  - tipo de cambio usado,
+  - monto equivalente en CLP (`amount_clp`).
+- La app intenta completar el tipo de cambio automáticamente con:
+  - fuente primaria: `mindicador.cl`
+  - fallback: `CMF` si existe `CMF_API_KEY`
+- Si no hay respuesta de fuente externa, el usuario puede completar el tipo de cambio manualmente.
+
+## Vehículo particular
+
+- Se registra desde `Nuevo Gasto` como tipo `Vehículo particular`.
+- Cada tramo corresponde a un gasto independiente para mantener intacta la lógica actual de gastos y rendiciones.
+- Campos operativos por tramo:
+  - fecha,
+  - descripción del trayecto,
+  - kilómetros,
+  - precio litro,
+  - rendimiento km/l,
+  - factor de corrección,
+  - GPS,
+  - boleta opcional de combustible.
+- Fórmula aplicada:
+
+```text
+km_ajustados = kilometros + (kilometros * factor_correccion)
+monto = (km_ajustados / rendimiento_km_l) * precio_litro
+```
+
+- El resultado se guarda como gasto normal y puede entrar en rendición, aprobación, PDF y API igual que cualquier otro gasto.
 
 ## GPS obligatorio en gastos
 
@@ -294,6 +341,7 @@ Autenticación:
 - `GET /expenses`: lista gastos (paginable por `limit` y `offset`).
 - `POST /expenses`: crea gasto; acepta imagen/PDF, puede autocompletar con IA y exige `gps_latitude`/`gps_longitude`.
   También acepta `receipt_time` (`HH:MM` o `HH:MM:SS`).
+  Soporta además `currency`, `exchange_rate`, `expense_type`, `distance_km`, `fuel_price_per_liter`, `vehicle_efficiency_km_l` y `correction_factor`.
 - `GET /reports`: lista rendiciones.
 - `POST /reports`: crea rendición a partir de `expense_ids`.
   Acepta `settlement_type` con valores `employee_reimbursement` o `corporate_card`.
@@ -391,6 +439,18 @@ seed.py
 - Revisa `OPENROUTER_API_KEY` en `.env`.
 - Verifica conectividad saliente a `https://openrouter.ai`.
 - Si falla, la carga manual sigue disponible.
+
+### El tipo de cambio no se completa solo
+
+- Revisa conectividad saliente hacia `mindicador.cl`.
+- Si usarás fallback institucional, configura `CMF_API_KEY`.
+- Mientras no exista respuesta de fuente externa, el tipo de cambio puede completarse manualmente.
+
+### PDF no se analiza o no se previsualiza
+
+- Verifica que el archivo tenga al menos una página legible.
+- La app analiza la primera página del PDF para OCR.
+- La vista previa depende del visor PDF del navegador. Si falla en un navegador, prueba `Ver grande` o cambia de navegador.
 
 ### Error de conexión a DB
 

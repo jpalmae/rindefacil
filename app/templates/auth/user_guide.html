@@ -18,7 +18,7 @@
         <ol class="list-decimal pl-6 space-y-2 text-gray-700">
             <li>Ingresa a <strong>Nuevo Gasto</strong>.</li>
             <li>Permite acceso a GPS y verifica que quede capturada tu ubicación.</li>
-            <li>Sube foto/PDF de boleta para autocompletado con IA.</li>
+            <li>Sube foto/PDF de boleta para autocompletado con IA o elige <strong>Vehículo particular</strong> si rendirás un tramo en auto propio.</li>
             <li>Revisa monto, comercio, fecha y hora de boleta.</li>
             <li>Completa el motivo (mínimo 15 caracteres) y guarda.</li>
             <li>Agrupa tus gastos en una rendición y envíala a aprobación.</li>
@@ -42,7 +42,7 @@
         <h2 class="text-xl font-bold text-gray-900">3. Crear un gasto correctamente</h2>
         <div class="space-y-3 text-gray-700">
             <p><strong>Ruta:</strong> <code>Mis Gastos -> + Nuevo Gasto</code>.</p>
-            <p><strong>Campos obligatorios:</strong> monto, comercio, fecha, motivo y GPS activo.</p>
+            <p><strong>Campos obligatorios:</strong> monto o cálculo aplicable, comercio/respaldo, fecha, motivo y GPS activo.</p>
             <p>
                 <strong>Hora boleta:</strong> recomendable completarla siempre. Mejora la trazabilidad y la validación
                 antifraude frente al momento real de rendición.
@@ -51,6 +51,32 @@
                 <strong>Boleta con IA:</strong> al cargar la imagen/PDF, el sistema intenta extraer monto, comercio,
                 fecha y hora automáticamente.
             </p>
+            <p>
+                <strong>Vista previa:</strong> al subir un comprobante podrás verlo dentro del formulario. Si es PDF,
+                la app muestra una vista previa y también permite abrirlo en grande.
+            </p>
+            <p>
+                <strong>Moneda:</strong> puedes rendir en <strong>CLP</strong> o <strong>USD</strong>. En USD el sistema
+                intenta completar el tipo de cambio automáticamente y calcula el equivalente en CLP.
+            </p>
+        </div>
+    </div>
+
+    <div class="card space-y-4">
+        <h2 class="text-xl font-bold text-gray-900">3.1 Gastos en vehículo particular</h2>
+        <div class="space-y-3 text-gray-700">
+            <p>Si el gasto corresponde a un traslado en auto propio, selecciona <strong>Vehículo particular</strong> como tipo de gasto.</p>
+            <p>Cada tramo se registra como un <strong>gasto independiente</strong>. Luego puedes agrupar varios tramos dentro de una misma rendición.</p>
+            <p>Debes completar:</p>
+            <ul class="list-disc pl-6 space-y-1">
+                <li>Fecha del tramo.</li>
+                <li>Descripción del trayecto.</li>
+                <li>Kilómetros recorridos.</li>
+                <li>Precio litro.</li>
+                <li>Rendimiento del vehículo en km/l.</li>
+                <li>Factor de corrección.</li>
+            </ul>
+            <p>El monto se calcula automáticamente. Puedes además subir una boleta de combustible como respaldo, sin afectar el cálculo.</p>
         </div>
     </div>
 
@@ -123,6 +149,9 @@
         <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
             <p><strong>Permisos adicionales de Finanzas:</strong> un usuario puede mantener su rol principal y además recibir permisos para ver rendiciones aprobadas de toda la empresa y marcar como pagadas las rendiciones de devolución al empleado.</p>
         </div>
+        <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
+            <p><strong>Vista recomendada para managers:</strong> en <code>Rendiciones</code> existen pestañas separadas para <strong>Pendientes de Mi Aprobación</strong>, <strong>Mis Rendiciones</strong> y, según permisos, <strong>Finanzas</strong>.</p>
+        </div>
     </div>
 
     <div class="card space-y-4">
@@ -133,7 +162,7 @@
                 Cada flujo puede activarse según reglas (por ejemplo monto mínimo) y se compone de pasos secuenciales.
             </p>
             <p>
-                El sistema evalúa el flujo cuando el usuario envía la rendición. Si hay varios flujos, selecciona el primero que cumpla la regla configurada.
+                El sistema evalúa el flujo cuando el usuario envía la rendición. Si hay varios flujos aplicables, selecciona el de mayor monto mínimo y, en empate, el de más pasos.
             </p>
             <p><strong>Tipos de aprobador por paso:</strong></p>
             <ul class="list-disc pl-6 space-y-1">
@@ -194,11 +223,23 @@
     </div>
 
     <div class="card space-y-3">
-        <h2 class="text-xl font-bold text-gray-900">11. Buenas prácticas para evitar rechazos</h2>
+        <h2 class="text-xl font-bold text-gray-900">11. Notificaciones y lectura</h2>
+        <ul class="list-disc pl-6 space-y-2 text-gray-700">
+            <li>La campana muestra solo notificaciones no leídas.</li>
+            <li><strong>Ver todas</strong> abre el historial completo.</li>
+            <li>Desde la bandeja puedes usar <strong>Marcar Todo Como Leído</strong>.</li>
+            <li>Si una notificación apunta a una rendición eliminada, la app muestra un aviso en vez de fallar.</li>
+        </ul>
+    </div>
+
+    <div class="card space-y-3">
+        <h2 class="text-xl font-bold text-gray-900">12. Buenas prácticas para evitar rechazos</h2>
         <ul class="list-disc pl-6 space-y-2 text-gray-700">
             <li>Rinde apenas ocurre el gasto (mejor score y mejor trazabilidad).</li>
             <li>No edites manualmente comercio/fecha/hora si la boleta ya fue leída correctamente.</li>
             <li>Sube imágenes nítidas, completas y sin cortes.</li>
+            <li>Si subes PDF, verifica que la primera página contenga la información clave del comprobante.</li>
+            <li>Para gastos en USD, revisa el tipo de cambio sugerido antes de guardar.</li>
             <li>Describe claramente el motivo y su contexto de negocio.</li>
         </ul>
     </div>
