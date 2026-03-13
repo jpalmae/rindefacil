@@ -108,6 +108,7 @@ def _select_approval_flow(company_id, total_amount):
 @login_required
 def index():
     scope = (request.args.get('scope') or '').strip().lower()
+    payment_filter = (request.args.get('payment_filter') or 'all').strip().lower()
     base_query = Report.query.options(
         joinedload(Report.user),
         joinedload(Report.approval_flow).selectinload(ApprovalFlow.steps),
@@ -149,6 +150,29 @@ def index():
     current_scope = scope if scope in report_views else default_scope
     reports = report_views.get(current_scope, [])
 
+    mine_reports = report_views.get('mine', [])
+    mine_payment_views = {
+        'all': mine_reports,
+        'pending_reimbursement': [
+            report for report in mine_reports
+            if report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
+            and report.status == ReportStatus.APPROVED
+        ],
+        'paid': [
+            report for report in mine_reports
+            if report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
+            and report.status == ReportStatus.PAID
+        ],
+        'corporate_card': [
+            report for report in mine_reports
+            if report.settlement_type == ReportSettlementType.CORPORATE_CARD
+        ],
+    }
+
+    current_payment_filter = payment_filter if payment_filter in mine_payment_views else 'all'
+    if current_scope == 'mine':
+        reports = mine_payment_views[current_payment_filter]
+
     report_ids = [r.id for r in reports]
     expense_counts = {}
     if report_ids:
@@ -165,6 +189,8 @@ def index():
         reports=reports,
         expense_counts=expense_counts,
         current_scope=current_scope,
+        current_payment_filter=current_payment_filter,
+        mine_payment_views=mine_payment_views,
         report_views=report_views,
     )
 

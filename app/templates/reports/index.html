@@ -17,6 +17,8 @@
     'all': 'Vista completa de rendiciones visibles para tu rol.',
     'finance': 'Rendiciones aprobadas o pagadas visibles para Finanzas, incluyendo las tuyas.'
 } %}
+{% set mine_payment_views = mine_payment_views or {'all': reports} %}
+{% set current_payment_filter = current_payment_filter or 'all' %}
 <div class="py-4">
     <div class="flex justify-between items-center mb-6">
         <div>
@@ -57,6 +59,36 @@
             Finanzas
         </a>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {% if current_scope == 'mine' and mine_payment_views %}
+    <div class="mb-5 flex flex-wrap gap-2">
+        <a href="{{ url_for('reports.index', scope='mine', payment_filter='all') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'all' else 'btn-outline' }}">
+            Todas
+        </a>
+        <a href="{{ url_for('reports.index', scope='mine', payment_filter='pending_reimbursement') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'pending_reimbursement' else 'btn-outline' }}">
+            Pendientes de devolución
+            {% if mine_payment_views['pending_reimbursement'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'pending_reimbursement' else 'text-primary' }}">{{ mine_payment_views['pending_reimbursement']|length }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('reports.index', scope='mine', payment_filter='paid') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'paid' else 'btn-outline' }}">
+            Pagadas
+            {% if mine_payment_views['paid'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'paid' else 'text-primary' }}">{{ mine_payment_views['paid']|length }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('reports.index', scope='mine', payment_filter='corporate_card') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'corporate_card' else 'btn-outline' }}">
+            Tarjeta corporativa
+            {% if mine_payment_views['corporate_card'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'corporate_card' else 'text-primary' }}">{{ mine_payment_views['corporate_card']|length }}</span>
+            {% endif %}
+        </a>
     </div>
     {% endif %}
 
@@ -122,6 +154,13 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {{ report.settlement_type_label }}
+                                {% if report.settlement_type == 'employee_reimbursement' and report.status == 'approved' %}
+                                <div class="mt-1 text-[11px] font-medium text-amber-700">Pendiente de devolución</div>
+                                {% elif report.settlement_type == 'employee_reimbursement' and report.status == 'paid' %}
+                                <div class="mt-1 text-[11px] font-medium text-emerald-700">Devolución pagada</div>
+                                {% elif report.settlement_type == 'corporate_card' %}
+                                <div class="mt-1 text-[11px] font-medium text-slate-500">Sin devolución al empleado</div>
+                                {% endif %}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                 <a href="{{ url_for('reports.show', id=report.id) }}"
@@ -165,6 +204,13 @@
                         <div class="text-[10px] font-mono text-gray-400 mt-1">{{ report.public_id }}</div>
                         <div class="text-sm font-medium text-gray-500 mt-0.5">{{ report.user.full_name }}</div>
                         <div class="text-xs text-gray-500 mt-1">{{ report.settlement_type_label }}</div>
+                        {% if report.settlement_type == 'employee_reimbursement' and report.status == 'approved' %}
+                        <div class="text-[11px] font-medium text-amber-700 mt-1">Pendiente de devolución</div>
+                        {% elif report.settlement_type == 'employee_reimbursement' and report.status == 'paid' %}
+                        <div class="text-[11px] font-medium text-emerald-700 mt-1">Devolución pagada</div>
+                        {% elif report.settlement_type == 'corporate_card' %}
+                        <div class="text-[11px] font-medium text-slate-500 mt-1">Sin devolución al empleado</div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -183,7 +229,17 @@
         {% else %}
         <div class="text-center py-12">
             <span class="i-heroicons-document-duplicate text-gray-300 text-6xl mb-4 block"></span>
-            <p class="text-gray-500 mb-4">No has creado ninguna rendición aún.</p>
+            <p class="text-gray-500 mb-4">
+                {% if current_scope == 'mine' and current_payment_filter == 'pending_reimbursement' %}
+                No tienes rendiciones pendientes de devolución.
+                {% elif current_scope == 'mine' and current_payment_filter == 'paid' %}
+                No tienes rendiciones pagadas.
+                {% elif current_scope == 'mine' and current_payment_filter == 'corporate_card' %}
+                No tienes rendiciones de tarjeta corporativa.
+                {% else %}
+                No has creado ninguna rendición aún.
+                {% endif %}
+            </p>
             <a href="{{ url_for('reports.new') }}" class="btn-outline">Agrupar gastos</a>
         </div>
         {% endif %}
