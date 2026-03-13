@@ -14,6 +14,14 @@ class ExpenseType:
     RECEIPT = 'receipt'
     PER_DIEM = 'per_diem'
     ADVANCE = 'advance'
+    MILEAGE = 'mileage'
+
+    LABELS = {
+        RECEIPT: 'Gasto normal',
+        MILEAGE: 'Vehículo particular',
+        PER_DIEM: 'Viático',
+        ADVANCE: 'Anticipo',
+    }
 
 
 class ExpenseCurrency:
@@ -39,6 +47,10 @@ class Expense(db.Model):
     currency = db.Column(db.String(3), default='CLP')
     exchange_rate = db.Column(db.Numeric(10, 4), default=1)
     amount_clp = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    distance_km = db.Column(db.Numeric(10, 2))
+    fuel_price_per_liter = db.Column(db.Numeric(10, 2))
+    vehicle_efficiency_km_l = db.Column(db.Numeric(10, 2))
+    correction_factor = db.Column(db.Numeric(6, 4))
     date = db.Column(db.Date, nullable=False)
     receipt_time = db.Column(db.Time)
     description = db.Column(db.Text)
@@ -82,6 +94,21 @@ class Expense(db.Model):
     @property
     def is_foreign_currency(self):
         return (self.currency or ExpenseCurrency.CLP) != ExpenseCurrency.CLP
+
+    @property
+    def is_mileage(self):
+        return self.expense_type == ExpenseType.MILEAGE
+
+    @property
+    def expense_type_label(self):
+        return ExpenseType.LABELS.get(self.expense_type, (self.expense_type or '').replace('_', ' ').title())
+
+    @property
+    def mileage_adjusted_km(self):
+        if not self.is_mileage or self.distance_km is None:
+            return None
+        factor = self.correction_factor or 0
+        return self.distance_km * (1 + factor)
 
     @property
     def public_id(self):

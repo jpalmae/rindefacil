@@ -21,34 +21,67 @@
         <form method="POST" action="{{ url_for('expenses.new') }}" enctype="multipart/form-data" class="space-y-6">
             <div class="space-y-6">
                 <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 text-center">
-                    <label class="block text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Monto
-                        Original</label>
-                    <div class="max-w-xs mx-auto mb-4">
-                        <label class="block text-xs font-medium text-gray-500 mb-1">Moneda</label>
-                        <select name="currency" id="currency" class="input text-center" x-model="currency" @change="handleCurrencyChange()">
-                            {% for value, label in currency_options.items() %}
-                            <option value="{{ value }}" {% if value == default_currency %}selected{% endif %}>{{ value }} · {{ label }}</option>
-                            {% endfor %}
-                        </select>
+                    <label class="block text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4"
+                        x-text="expenseType === 'mileage' ? 'Monto Calculado' : 'Monto Original'">Monto Original</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mx-auto mb-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Tipo de gasto</label>
+                            <select name="expense_type" id="expense_type" class="input text-center" x-model="expenseType"
+                                @change="handleExpenseTypeChange()">
+                                {% for value, label in expense_type_options.items() %}
+                                <option value="{{ value }}" {% if value == default_expense_type %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div x-show="expenseType === 'receipt'" x-cloak>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Moneda</label>
+                            <select name="currency" id="currency" class="input text-center" x-model="currency" @change="handleCurrencyChange()">
+                                {% for value, label in currency_options.items() %}
+                                <option value="{{ value }}" {% if value == default_currency %}selected{% endif %}>{{ value }} · {{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div x-show="expenseType === 'mileage'" x-cloak class="rounded-xl border border-primary/15 bg-white px-4 py-3 text-left">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Moneda base</p>
+                            <p class="mt-1 text-sm font-semibold text-gray-900">CLP calculado automáticamente</p>
+                            <p class="mt-1 text-xs text-gray-500">Cada tramo se guarda como gasto individual y se suma normalmente en la rendición.</p>
+                        </div>
                     </div>
                     <div class="flex items-center justify-center text-4xl font-black text-gray-900 min-w-0">
-                        <span class="text-gray-400 mr-2" x-text="currencySymbol()"></span>
+                        <span class="text-gray-400 mr-2" x-text="expenseType === 'mileage' ? '$' : currencySymbol()"></span>
                         <input type="number" step="0.01" name="amount" id="amount"
                             x-model="amountValue"
+                            :readonly="expenseType === 'mileage'"
                             class="bg-transparent border-none focus:ring-0 text-center text-gray-900 placeholder:text-gray-400 w-full max-w-[200px] min-w-0 p-0"
+                            :class="expenseType === 'mileage' ? 'cursor-not-allowed opacity-80' : ''"
                             placeholder="0.00" required autofocus>
                     </div>
-                    <p class="mt-3 text-sm text-gray-500" x-show="currency === 'USD'">
+                    <p class="mt-3 text-sm text-gray-500" x-show="expenseType === 'receipt' && currency === 'USD'">
                         Equivalente CLP:
                         <span class="font-bold text-gray-900" x-text="formattedClpAmount()"></span>
                     </p>
+                    <div x-show="expenseType === 'mileage'" x-cloak class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                        <div class="rounded-xl border border-gray-100 bg-white px-4 py-3">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Kilómetros ajustados</p>
+                            <p class="mt-1 text-sm font-semibold text-gray-900" x-text="formattedMileageAdjustedKm()"></p>
+                        </div>
+                        <div class="rounded-xl border border-gray-100 bg-white px-4 py-3">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fórmula</p>
+                            <p class="mt-1 text-xs text-gray-700 leading-relaxed" x-text="mileageFormulaText()"></p>
+                        </div>
+                        <div class="rounded-xl border border-gray-100 bg-white px-4 py-3">
+                            <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Respaldo</p>
+                            <p class="mt-1 text-xs text-gray-700 leading-relaxed">Puedes subir boleta de combustible como comprobante sin afectar el cálculo del tramo.</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Comprobante</label>
                     <div class="relative group">
                         <div
-                            class="relative flex flex-col items-center justify-center w-full h-28 md:h-32 px-4 transition-all duration-200 bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden group-hover:bg-primary-50 group-hover:border-primary cursor-pointer"
+                            class="relative flex flex-col items-center justify-center w-full px-4 transition-all duration-200 bg-white border-2 border-dashed border-gray-300 rounded-2xl overflow-hidden group-hover:bg-primary-50 group-hover:border-primary cursor-pointer"
+                            :class="isPdfFile() ? 'h-64 md:h-80' : 'h-28 md:h-32'"
                             role="button" tabindex="0" @click="handleReceiptAreaClick"
                             @keydown.enter.prevent="handleReceiptAreaClick"
                             @keydown.space.prevent="handleReceiptAreaClick">
@@ -61,9 +94,17 @@
                             </template>
 
                             <template x-if="imagePreviewUrl && isPdfFile()">
-                                <div class="w-full h-full flex flex-col items-center justify-center text-gray-600">
-                                    <span class="i-heroicons-document-text text-5xl mb-2"></span>
-                                    <p class="text-sm font-medium text-center" x-text="fileName"></p>
+                                <div class="w-full h-full bg-gray-100 p-2 md:p-3">
+                                    <div class="relative w-full h-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                                        <iframe :src="pdfPreviewUrl()" class="w-full h-full border-0 pointer-events-none bg-white" title="Vista previa del comprobante PDF"></iframe>
+                                        <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent px-3 py-3 text-white">
+                                            <div class="flex items-center gap-2">
+                                                <span class="i-heroicons-document-text text-lg"></span>
+                                                <p class="text-sm font-medium truncate" x-text="fileName"></p>
+                                            </div>
+                                            <p class="mt-1 text-xs text-white/80">Vista previa de la primera página. Toca para abrir más grande.</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </template>
 
@@ -119,9 +160,11 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Comercio / Proveedor *</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1"
+                            x-text="expenseType === 'mileage' ? 'Estación de servicio / respaldo' : 'Comercio / Proveedor *'">Comercio / Proveedor *</label>
                         <input type="text" name="merchant" id="merchant" class="input"
-                            placeholder="Ej. Uber, Latam, Restaurante XY" required>
+                            :placeholder="expenseType === 'mileage' ? 'Ej. Copec, Shell, Petrobras (opcional)' : 'Ej. Uber, Latam, Restaurante XY'"
+                            :required="expenseType === 'receipt'">
                     </div>
 
                     <div>
@@ -152,7 +195,7 @@
                         </select>
                     </div>
 
-                    <div x-show="currency === 'USD'" x-cloak>
+                    <div x-show="expenseType === 'receipt' && currency === 'USD'" x-cloak>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Cambio (CLP por USD)</label>
                         <input type="number" step="0.0001" min="0" name="exchange_rate" id="exchange_rate"
                             x-model="exchangeRate" class="input text-gray-900"
@@ -160,10 +203,40 @@
                         <p class="mt-1 text-xs text-gray-500" x-text="exchangeRateMessage"></p>
                     </div>
 
+                    <div x-show="expenseType === 'mileage'" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Kilómetros *</label>
+                        <input type="number" step="0.01" min="0" name="distance_km" id="distance_km" class="input"
+                            x-model="distanceKm" @input="recalculateMileageAmount()"
+                            placeholder="Ej. 65" :required="expenseType === 'mileage'">
+                    </div>
+
+                    <div x-show="expenseType === 'mileage'" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Precio litro *</label>
+                        <input type="number" step="0.01" min="0" name="fuel_price_per_liter" id="fuel_price_per_liter" class="input"
+                            x-model="fuelPricePerLiter" @input="recalculateMileageAmount()"
+                            placeholder="Ej. 1390" :required="expenseType === 'mileage'">
+                    </div>
+
+                    <div x-show="expenseType === 'mileage'" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Rendimiento km/l *</label>
+                        <input type="number" step="0.01" min="0" name="vehicle_efficiency_km_l" id="vehicle_efficiency_km_l" class="input"
+                            x-model="vehicleEfficiencyKmL" @input="recalculateMileageAmount()"
+                            placeholder="Ej. 12" :required="expenseType === 'mileage'">
+                        <p class="mt-1 text-xs text-gray-500">Default según planilla: 12 km/l.</p>
+                    </div>
+
+                    <div x-show="expenseType === 'mileage'" x-cloak>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Factor de corrección *</label>
+                        <input type="number" step="0.0001" min="0" name="correction_factor" id="correction_factor" class="input"
+                            x-model="correctionFactor" @input="recalculateMileageAmount()"
+                            placeholder="Ej. 0.8" :required="expenseType === 'mileage'">
+                        <p class="mt-1 text-xs text-gray-500">Default según planilla: 0.8.</p>
+                    </div>
+
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
                         <textarea name="description" id="description" rows="2" class="input"
-                            placeholder="Explica el motivo del gasto (Mínimo 15 caracteres)" minlength="15"
+                            :placeholder="expenseType === 'mileage' ? 'Ej. Casa a Lidice - Casa, visita técnica, reunión con cliente.' : 'Explica el motivo del gasto (Mínimo 15 caracteres)'" minlength="15"
                             required></textarea>
                     </div>
 
@@ -216,9 +289,14 @@
             fileName: '',
             imagePreviewUrl: null,
             selectedFile: null,
+            expenseType: '{{ default_expense_type }}',
             currency: 'CLP',
             exchangeRate: '',
             amountValue: '',
+            distanceKm: '',
+            fuelPricePerLiter: '{{ mileage_defaults.fuel_price_per_liter }}',
+            vehicleEfficiencyKmL: '{{ mileage_defaults.vehicle_efficiency_km_l }}',
+            correctionFactor: '{{ mileage_defaults.correction_factor }}',
             exchangeRateSource: '',
             exchangeRateMessage: '',
             ocrMessage: '',
@@ -249,6 +327,26 @@
                 return Number.isFinite(parsed) ? parsed : 0;
             },
 
+            distanceKmAsNumber() {
+                const parsed = Number(this.distanceKm || 0);
+                return Number.isFinite(parsed) ? parsed : 0;
+            },
+
+            fuelPricePerLiterAsNumber() {
+                const parsed = Number(this.fuelPricePerLiter || 0);
+                return Number.isFinite(parsed) ? parsed : 0;
+            },
+
+            vehicleEfficiencyKmLAsNumber() {
+                const parsed = Number(this.vehicleEfficiencyKmL || 0);
+                return Number.isFinite(parsed) ? parsed : 0;
+            },
+
+            correctionFactorAsNumber() {
+                const parsed = Number(this.correctionFactor || 0);
+                return Number.isFinite(parsed) ? parsed : 0;
+            },
+
             exchangeRateAsNumber() {
                 const parsed = Number(this.exchangeRate || 0);
                 return Number.isFinite(parsed) ? parsed : 0;
@@ -259,8 +357,45 @@
                 return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(total || 0);
             },
 
+            mileageAdjustedKm() {
+                const distance = this.distanceKmAsNumber();
+                const correction = this.correctionFactorAsNumber();
+                if (!distance || correction < 0) return 0;
+                return distance * (1 + correction);
+            },
+
+            formattedMileageAdjustedKm() {
+                const adjusted = this.mileageAdjustedKm();
+                if (!adjusted) return '0 km';
+                return `${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 2 }).format(adjusted)} km`;
+            },
+
+            mileageFormulaText() {
+                const distance = this.distanceKmAsNumber();
+                const correction = this.correctionFactorAsNumber();
+                const efficiency = this.vehicleEfficiencyKmLAsNumber();
+                const fuelPrice = this.fuelPricePerLiterAsNumber();
+                if (!distance || !efficiency || !fuelPrice) {
+                    return '((km + km x factor) / rendimiento) x precio litro';
+                }
+                return `((${distance} + ${distance} x ${correction}) / ${efficiency}) x ${fuelPrice}`;
+            },
+
+            recalculateMileageAmount() {
+                if (this.expenseType !== 'mileage') return;
+                const adjustedDistance = this.mileageAdjustedKm();
+                const efficiency = this.vehicleEfficiencyKmLAsNumber();
+                const fuelPrice = this.fuelPricePerLiterAsNumber();
+                if (!adjustedDistance || !efficiency || !fuelPrice) {
+                    this.amountValue = '';
+                    return;
+                }
+                const total = (adjustedDistance / efficiency) * fuelPrice;
+                this.amountValue = total > 0 ? total.toFixed(2) : '';
+            },
+
             async updateExchangeRate(force = false) {
-                if (this.currency !== 'USD') {
+                if (this.expenseType !== 'receipt' || this.currency !== 'USD') {
                     this.exchangeRate = '';
                     this.exchangeRateSource = '';
                     this.exchangeRateMessage = '';
@@ -311,9 +446,29 @@
                 this.exchangeRateMessage = '';
             },
 
+            handleExpenseTypeChange() {
+                if (this.expenseType === 'mileage') {
+                    this.currency = 'CLP';
+                    this.exchangeRate = '';
+                    this.exchangeRateSource = '';
+                    this.exchangeRateMessage = '';
+                    this.recalculateMileageAmount();
+                    return;
+                }
+                this.distanceKm = '';
+                this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
+                this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
+                this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
+            },
+
             isPdfFile() {
                 if (!this.selectedFile || !this.fileName) return false;
                 return this.selectedFile.type === 'application/pdf' || this.fileName.toLowerCase().endsWith('.pdf');
+            },
+
+            pdfPreviewUrl() {
+                if (!this.imagePreviewUrl || !this.isPdfFile()) return '';
+                return `${this.imagePreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`;
             },
 
             openPreviewModal() {
@@ -336,29 +491,41 @@
             init() {
                 this.isExtracting = false;
                 this.fileName = '';
+                this.expenseType = '{{ default_expense_type }}';
                 this.currency = 'CLP';
                 this.exchangeRate = '';
                 this.amountValue = '';
+                this.distanceKm = '';
+                this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
+                this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
+                this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
                 this.exchangeRateSource = '';
                 this.exchangeRateMessage = '';
                 this.clearPreview();
                 this.selectedFile = null;
                 this.ocrMessage = '';
                 this.ocrMessageType = 'info';
+                this.recalculateMileageAmount();
                 this.resetGpsState();
                 this.requestLocation(false);
                 window.addEventListener('pageshow', () => {
                     this.isExtracting = false;
                     this.fileName = '';
+                    this.expenseType = '{{ default_expense_type }}';
                     this.currency = 'CLP';
                     this.exchangeRate = '';
                     this.amountValue = '';
+                    this.distanceKm = '';
+                    this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
+                    this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
+                    this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
                     this.exchangeRateSource = '';
                     this.exchangeRateMessage = '';
                     this.clearPreview();
                     this.selectedFile = null;
                     this.ocrMessage = '';
                     this.ocrMessageType = 'info';
+                    this.recalculateMileageAmount();
                     this.resetGpsState();
                     this.requestLocation(false);
                     const receiptInput = document.getElementById('receipt');
@@ -521,12 +688,12 @@
                     const result = payload.data || payload.result || {};
                     let updatedFields = 0;
 
-                    if (result.amount) {
+                    if (result.amount && this.expenseType !== 'mileage') {
                         this.amountValue = result.amount;
                         document.getElementById('amount').value = result.amount;
                         updatedFields += 1;
                     }
-                    if (result.currency && ['CLP', 'USD'].includes(String(result.currency).toUpperCase())) {
+                    if (result.currency && this.expenseType !== 'mileage' && ['CLP', 'USD'].includes(String(result.currency).toUpperCase())) {
                         this.currency = String(result.currency).toUpperCase();
                         document.getElementById('currency').value = this.currency;
                         this.handleCurrencyChange();
@@ -538,7 +705,7 @@
                     }
                     if (result.date) {
                         document.getElementById('date').value = result.date;
-                        if (this.currency === 'USD') {
+                        if (this.expenseType === 'receipt' && this.currency === 'USD') {
                             this.updateExchangeRate(true);
                         }
                         updatedFields += 1;
@@ -570,6 +737,13 @@
 
             async submitForm() {
                 const form = this.$root.querySelector('form');
+                if (this.expenseType === 'mileage') {
+                    this.recalculateMileageAmount();
+                    if (!this.amountAsNumber()) {
+                        alert('Debes ingresar kilómetros, precio litro, rendimiento y factor de corrección válidos.');
+                        return;
+                    }
+                }
                 if (!form.checkValidity()) {
                     form.reportValidity();
                     return;

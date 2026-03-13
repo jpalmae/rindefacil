@@ -54,7 +54,20 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{
                                 expense.date.strftime('%d/%m/%Y') }}</td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{
-                                expense.merchant or '-' }}
+                                expense.merchant or ('Vehículo particular' if expense.is_mileage else '-') }}
+                                {% if expense.is_mileage %}
+                                <div class="mt-1">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">Vehículo particular</span>
+                                </div>
+                                {% endif %}
+                                {% if expense.is_mileage and expense.distance_km %}
+                                <div class="text-[10px] text-gray-500 mt-1">
+                                    {{ "{:,.2f}".format(expense.distance_km) }} km
+                                    {% if expense.fuel_price_per_liter %}
+                                    · Litro ${{ "{:,.0f}".format(expense.fuel_price_per_liter) }}
+                                    {% endif %}
+                                </div>
+                                {% endif %}
                                 <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -155,11 +168,24 @@
                                 }}</span>
                             {% endif %}
                         </div>
-                        <h3 class="text-base font-bold text-gray-900 leading-tight">{{ expense.merchant or 'Gasto sin
-                            comercio' }}</h3>
+                        <h3 class="text-base font-bold text-gray-900 leading-tight">{{ expense.merchant or ('Vehículo particular' if expense.is_mileage else 'Gasto sin
+                            comercio') }}</h3>
+                        {% if expense.is_mileage %}
+                        <div class="mt-1">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">Vehículo particular</span>
+                        </div>
+                        {% endif %}
                         <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
                         <div class="text-sm font-medium text-gray-500 mt-0.5">{{ expense.category.name if
                             expense.category else 'Sin categoría' }}</div>
+                        {% if expense.is_mileage and expense.distance_km %}
+                        <div class="text-[10px] text-gray-500 mt-1">
+                            {{ "{:,.2f}".format(expense.distance_km) }} km
+                            {% if expense.fuel_price_per_liter %}
+                            · Litro ${{ "{:,.0f}".format(expense.fuel_price_per_liter) }}
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         <div class="mt-1">
                             {% if expense.gps_validation_status == 'match' %}
                             <span class="badge-green !text-[10px] !px-2 !py-0.5">Coherente</span>

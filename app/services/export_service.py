@@ -112,7 +112,9 @@ def generate_report_pdf(report):
     # Table Data
     for exp in report.expenses.order_by('date').all():
         cat_name = exp.category.name if exp.category else 'N/A'
-        merchant = exp.merchant or 'S/N'
+        merchant = exp.merchant or ('Vehículo particular' if exp.is_mileage else 'S/N')
+        if exp.is_mileage and exp.distance_km is not None:
+            merchant = f"{merchant} ({exp.distance_km:,.2f} km)"
         data.append([
             exp.date.strftime('%d/%m/%Y'),
             merchant,

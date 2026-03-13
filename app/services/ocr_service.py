@@ -2,10 +2,12 @@ import os
 import json
 import base64
 import re
+import tempfile
 import imagehash
 from PIL import Image
 from openai import OpenAI
 from flask import current_app
+import pypdfium2 as pdfium
 
 
 def _extract_json_payload(raw_content):
@@ -39,6 +41,41 @@ def _extract_json_payload(raw_content):
     return None
 
 
+def _is_pdf(path):
+    return os.path.splitext(path)[1].lower() == '.pdf'
+
+
+def _render_pdf_first_page_to_png(pdf_path):
+    pdf = None
+    output_path = None
+    try:
+        pdf = pdfium.PdfDocument(pdf_path)
+        if len(pdf) < 1:
+            return None
+        page = pdf[0]
+        bitmap = page.render(scale=2.0)
+        image = bitmap.to_pil()
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+        output_path = temp_file.name
+        temp_file.close()
+        image.save(output_path, format='PNG')
+        return output_path
+    except Exception as exc:
+        current_app.logger.error("No se pudo renderizar PDF para OCR: %s", exc)
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        return None
+    finally:
+        if pdf is not None:
+            try:
+                pdf.close()
+            except Exception:
+                pass
+
+
 def extract_expense_data(image_path):
     """
     Lee una imagen de recibo local y usa IA a través de OpenRouter 
@@ -56,15 +93,22 @@ def extract_expense_data(image_path):
         api_key=api_key,
     )
 
+    temp_image_path = None
     try:
+        source_path = image_path
+        if _is_pdf(image_path):
+            temp_image_path = _render_pdf_first_page_to_png(image_path)
+            if not temp_image_path:
+                return None
+            source_path = temp_image_path
+
         # Codificar imagen en base64
-        with open(image_path, "rb") as image_file:
+        with open(source_path, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
             
-        file_ext = os.path.splitext(image_path)[1].lower()
+        file_ext = os.path.splitext(source_path)[1].lower()
         mime_type = "image/jpeg"
         if file_ext == '.png': mime_type = "image/png"
-        elif file_ext == '.pdf': mime_type = "application/pdf"
 
         prompt = """
         Eres un asistente de contabilidad experto. Extrae la información de este recibo comercial.
@@ -109,14 +153,33 @@ def extract_expense_data(image_path):
     except Exception as e:
         current_app.logger.error(f"Error en OCR Service: {e}")
         return None
+    finally:
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except OSError:
+                pass
 
 def calculate_receipt_hash(image_path):
     """
     Calcula un pHash (perceptual hash) de la imagen para detectar duplicados visuales.
     """
+    temp_image_path = None
     try:
-        hash_val = imagehash.phash(Image.open(image_path))
+        source_path = image_path
+        if _is_pdf(image_path):
+            temp_image_path = _render_pdf_first_page_to_png(image_path)
+            if not temp_image_path:
+                return None
+            source_path = temp_image_path
+        hash_val = imagehash.phash(Image.open(source_path))
         return str(hash_val)
     except Exception as e:
         current_app.logger.warning(f"No se pudo calcular hash de la imagen: {e}")
         return None
+    finally:
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+            except OSError:
+                pass

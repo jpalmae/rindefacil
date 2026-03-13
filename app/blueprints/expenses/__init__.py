@@ -10,13 +10,17 @@ from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.models.category import Category
-from app.models.expense import Expense, ExpenseCurrency, ExpenseStatus
+from app.models.expense import Expense, ExpenseCurrency, ExpenseStatus, ExpenseType
 from app.services.audit_service import log_action
 from app.services.exchange_rate_service import get_usd_exchange_rate_for_date
 from app.services.location_service import evaluate_expense_integrity, reverse_geocode
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
 expenses_bp = Blueprint('expenses', __name__)
+
+MILEAGE_DEFAULT_FUEL_PRICE = Decimal('1390')
+MILEAGE_DEFAULT_EFFICIENCY = Decimal('12')
+MILEAGE_DEFAULT_CORRECTION_FACTOR = Decimal('0.8')
 
 
 def _parse_amount(value):
@@ -133,6 +137,13 @@ def _normalize_currency(value):
     return currency
 
 
+def _normalize_expense_type(value):
+    expense_type = (str(value).strip().lower() if value is not None else ExpenseType.RECEIPT) or ExpenseType.RECEIPT
+    if expense_type not in ExpenseType.LABELS:
+        return None
+    return expense_type
+
+
 def _compute_amount_clp(amount, currency, exchange_rate):
     if amount is None:
         return None
@@ -141,6 +152,17 @@ def _compute_amount_clp(amount, currency, exchange_rate):
     if exchange_rate is None or exchange_rate <= 0:
         return None
     return (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _compute_mileage_amount(distance_km, fuel_price_per_liter, vehicle_efficiency_km_l, correction_factor):
+    if any(value is None for value in (distance_km, fuel_price_per_liter, vehicle_efficiency_km_l, correction_factor)):
+        return None
+    if distance_km <= 0 or fuel_price_per_liter <= 0 or vehicle_efficiency_km_l <= 0 or correction_factor < 0:
+        return None
+    adjusted_distance = distance_km * (Decimal("1") + correction_factor)
+    return ((adjusted_distance / vehicle_efficiency_km_l) * fuel_price_per_liter).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
 
 
 def _parse_iso_datetime(value):
@@ -235,16 +257,21 @@ def new():
     categories = Category.query.filter_by(company_id=current_user.company_id).all()
 
     if request.method == 'POST':
+        expense_type = _normalize_expense_type(request.form.get('expense_type'))
         amount_raw = request.form.get('amount')
         amount = _parse_amount(amount_raw)
         currency = _normalize_currency(request.form.get('currency'))
         exchange_rate = _parse_non_negative_decimal(request.form.get('exchange_rate'))
-        merchant = request.form.get('merchant')
+        merchant = (request.form.get('merchant') or '').strip() or None
         client_partner = request.form.get('client_partner')
         date_str = request.form.get('date')
         category_id = request.form.get('category_id') or None
         description = request.form.get('description', '')
         receipt_time = _parse_time(request.form.get('receipt_time'))
+        distance_km = _parse_non_negative_decimal(request.form.get('distance_km'))
+        fuel_price_per_liter = _parse_non_negative_decimal(request.form.get('fuel_price_per_liter'))
+        vehicle_efficiency_km_l = _parse_non_negative_decimal(request.form.get('vehicle_efficiency_km_l'))
+        correction_factor = _parse_non_negative_decimal(request.form.get('correction_factor'))
         gps_latitude_raw = request.form.get('gps_latitude')
         gps_longitude_raw = request.form.get('gps_longitude')
         gps_accuracy_raw = request.form.get('gps_accuracy_m')
@@ -267,12 +294,8 @@ def new():
             flash('El motivo debe tener un mínimo de 15 caracteres.', 'danger')
             return redirect(url_for('expenses.new'))
 
-        if amount is None or amount <= 0:
-            flash('El monto ingresado no es válido.', 'danger')
-            return redirect(url_for('expenses.new'))
-
-        if currency is None:
-            flash('La moneda seleccionada no es válida.', 'danger')
+        if expense_type is None:
+            flash('El tipo de gasto seleccionado no es válido.', 'danger')
             return redirect(url_for('expenses.new'))
 
         auto_rate_date = None
@@ -282,15 +305,36 @@ def new():
             except ValueError:
                 auto_rate_date = None
 
-        if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
-            auto_rate = get_usd_exchange_rate_for_date(auto_rate_date) if auto_rate_date else None
-            exchange_rate = auto_rate['exchange_rate'] if auto_rate else None
-            if exchange_rate is None or exchange_rate <= 0:
-                flash('Debes ingresar un tipo de cambio válido para gastos en USD.', 'danger')
+        if expense_type == ExpenseType.MILEAGE:
+            amount = _compute_mileage_amount(
+                distance_km=distance_km,
+                fuel_price_per_liter=fuel_price_per_liter,
+                vehicle_efficiency_km_l=vehicle_efficiency_km_l,
+                correction_factor=correction_factor,
+            )
+            if amount is None or amount <= 0:
+                flash('Debes ingresar kilómetros, precio litro, rendimiento y factor de corrección válidos para vehículo particular.', 'danger')
+                return redirect(url_for('expenses.new'))
+            currency = ExpenseCurrency.CLP
+            exchange_rate = Decimal('1')
+        else:
+            if amount is None or amount <= 0:
+                flash('El monto ingresado no es válido.', 'danger')
                 return redirect(url_for('expenses.new'))
 
-        if currency == ExpenseCurrency.CLP:
-            exchange_rate = Decimal('1')
+            if currency is None:
+                flash('La moneda seleccionada no es válida.', 'danger')
+                return redirect(url_for('expenses.new'))
+
+            if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
+                auto_rate = get_usd_exchange_rate_for_date(auto_rate_date) if auto_rate_date else None
+                exchange_rate = auto_rate['exchange_rate'] if auto_rate else None
+                if exchange_rate is None or exchange_rate <= 0:
+                    flash('Debes ingresar un tipo de cambio válido para gastos en USD.', 'danger')
+                    return redirect(url_for('expenses.new'))
+
+            if currency == ExpenseCurrency.CLP:
+                exchange_rate = Decimal('1')
 
         amount_clp = _compute_amount_clp(amount, currency, exchange_rate)
         if amount_clp is None or amount_clp <= 0:
@@ -324,6 +368,10 @@ def new():
                 currency=currency,
                 exchange_rate=exchange_rate,
                 amount_clp=amount_clp,
+                distance_km=distance_km if expense_type == ExpenseType.MILEAGE else None,
+                fuel_price_per_liter=fuel_price_per_liter if expense_type == ExpenseType.MILEAGE else None,
+                vehicle_efficiency_km_l=vehicle_efficiency_km_l if expense_type == ExpenseType.MILEAGE else None,
+                correction_factor=correction_factor if expense_type == ExpenseType.MILEAGE else None,
                 merchant=merchant,
                 client_partner=client_partner,
                 date=expense_date,
@@ -331,6 +379,7 @@ def new():
                 category_id=category_id,
                 description=description,
                 status=ExpenseStatus.DRAFT,
+                expense_type=expense_type,
                 gps_latitude=gps_latitude,
                 gps_longitude=gps_longitude,
                 gps_accuracy_m=gps_accuracy_m,
@@ -425,7 +474,7 @@ def new():
                 action='expense_created',
                 entity_type='expense',
                 entity_id=expense.id,
-                description=f"Gasto creado por {expense.amount} {expense.currency} (CLP {expense.amount_clp}) en {expense.merchant}",
+                description=f"Gasto {expense.expense_type_label} creado por {expense.amount} {expense.currency} (CLP {expense.amount_clp}) en {expense.merchant or 'sin comercio'}",
             )
 
             flash('Gasto creado exitosamente.', 'success')
@@ -440,6 +489,16 @@ def new():
         categories=categories,
         currency_options=ExpenseCurrency.CHOICES,
         default_currency=ExpenseCurrency.CLP,
+        expense_type_options={
+            ExpenseType.RECEIPT: ExpenseType.LABELS[ExpenseType.RECEIPT],
+            ExpenseType.MILEAGE: ExpenseType.LABELS[ExpenseType.MILEAGE],
+        },
+        default_expense_type=ExpenseType.RECEIPT,
+        mileage_defaults={
+            'fuel_price_per_liter': _amount_for_input(MILEAGE_DEFAULT_FUEL_PRICE),
+            'vehicle_efficiency_km_l': _amount_for_input(MILEAGE_DEFAULT_EFFICIENCY),
+            'correction_factor': _amount_for_input(MILEAGE_DEFAULT_CORRECTION_FACTOR),
+        },
     )
 
 

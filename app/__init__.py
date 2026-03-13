@@ -106,7 +106,9 @@ def create_app(config_name=None):
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data: blob: *; "
-            "connect-src 'self' https://openrouter.ai;"
+            "connect-src 'self' https://openrouter.ai; "
+            "frame-src 'self' blob:; "
+            "object-src 'self' blob:;"
         )
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['X-Frame-Options'] = 'SAMEORIGIN'

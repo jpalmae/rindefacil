@@ -300,10 +300,15 @@
                                     class="{{ 'i-heroicons-shopping-cart' if expense.category and 'comida' in expense.category.name|lower else 'i-heroicons-receipt-receipt' }}"></span>
                             </div>
                             <div class="min-w-0">
-                                <h4 class="text-base font-bold text-gray-900 leading-tight">{{ expense.merchant or 'Gasto'
+                                <h4 class="text-base font-bold text-gray-900 leading-tight">{{ expense.merchant or ('Vehículo particular' if expense.is_mileage else 'Gasto')
                                     }}</h4>
                                 <div class="text-xs font-medium text-gray-500 mt-0.5">{{ expense.category.name if
                                     expense.category else 'General' }} • {{ expense.date.strftime('%d/%m/%Y') }}</div>
+                                {% if expense.is_mileage %}
+                                <div class="mt-1">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">Vehículo particular</span>
+                                </div>
+                                {% endif %}
                                 <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
                             </div>
                         </div>
@@ -359,12 +364,31 @@
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Moneda</p>
                                 <p class="mt-2 text-sm text-gray-900">
-                                    {{ expense.currency }}
+                                    {{ expense.expense_type_label }} · {{ expense.currency }}
                                     {% if expense.currency == 'USD' %}
                                     · TC {{ expense.exchange_rate }}
                                     {% endif %}
                                 </p>
                             </div>
+                            {% if expense.is_mileage %}
+                            <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Kilómetros</p>
+                                <p class="mt-2 text-sm text-gray-900">
+                                    {{ "{:,.2f}".format(expense.distance_km) if expense.distance_km is not none else '0.00' }} km
+                                    {% if expense.mileage_adjusted_km is not none %}
+                                    · Ajustados {{ "{:,.2f}".format(expense.mileage_adjusted_km) }} km
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
+                                <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Parámetros de cálculo</p>
+                                <p class="mt-2 text-sm text-gray-900">
+                                    Litro ${{ "{:,.0f}".format(expense.fuel_price_per_liter or 0) }}
+                                    · Rendimiento {{ "{:,.2f}".format(expense.vehicle_efficiency_km_l or 0) }} km/l
+                                    · Factor {{ expense.correction_factor or 0 }}
+                                </p>
+                            </div>
+                            {% endif %}
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Fecha de Rendición</p>
                                 <p class="mt-2 text-sm text-gray-900">
