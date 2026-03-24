@@ -23,7 +23,7 @@ MILEAGE_DEFAULT_EFFICIENCY = Decimal('12')
 MILEAGE_DEFAULT_CORRECTION_FACTOR = Decimal('0.8')
 
 
-def _parse_amount(value):
+def _parse_amount(value, currency=None):
     """
     Normaliza montos con formatos locales/internacionales a Decimal.
     Ejemplos válidos: 2500, 2.500, 2,500, 2.500,75, 2,500.75
@@ -50,6 +50,23 @@ def _parse_amount(value):
     cleaned = cleaned.replace("-", "")
     if not cleaned:
         return None
+
+    if currency == ExpenseCurrency.CLP:
+        last_separator = max(cleaned.rfind("."), cleaned.rfind(","))
+        if last_separator != -1:
+            right = cleaned[last_separator + 1:]
+            left = cleaned[:last_separator]
+            if right.isdigit() and len(right) <= 2:
+                cleaned = left
+        normalized = re.sub(r"[.,]", "", cleaned)
+        if negative:
+            normalized = f"-{normalized}"
+        if not normalized or normalized == "-":
+            return None
+        try:
+            return Decimal(normalized)
+        except InvalidOperation:
+            return None
 
     if "." in cleaned and "," in cleaned:
         # El último separador suele ser el decimal
@@ -88,9 +105,9 @@ def _parse_amount(value):
         return None
 
 
-def _amount_for_input(value):
+def _amount_for_input(value, currency=None):
     """Serializa Decimal a string estable para input type=number."""
-    amount = _parse_amount(value)
+    amount = _parse_amount(value, currency=currency)
     if amount is None:
         return None
 
@@ -259,8 +276,8 @@ def new():
     if request.method == 'POST':
         expense_type = _normalize_expense_type(request.form.get('expense_type'))
         amount_raw = request.form.get('amount')
-        amount = _parse_amount(amount_raw)
         currency = _normalize_currency(request.form.get('currency'))
+        amount = _parse_amount(amount_raw, currency=currency)
         exchange_rate = _parse_non_negative_decimal(request.form.get('exchange_rate'))
         merchant = (request.form.get('merchant') or '').strip() or None
         client_partner = request.form.get('client_partner')
@@ -514,6 +531,7 @@ def extract_data():
 
     temp_path = None
     try:
+        currency = _normalize_currency(request.form.get('currency')) or ExpenseCurrency.CLP
         filename = secure_filename(file.filename)
         temp_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'temp')
         os.makedirs(temp_dir, exist_ok=True)
@@ -525,7 +543,7 @@ def extract_data():
             return jsonify({'error': 'No fue posible extraer datos del comprobante. Completa el formulario manualmente.'}), 422
 
         if data.get('amount') is not None:
-            parsed_amount = _amount_for_input(data.get('amount'))
+            parsed_amount = _amount_for_input(data.get('amount'), currency=currency)
             if parsed_amount is not None:
                 data['amount'] = parsed_amount
 

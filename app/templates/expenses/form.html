@@ -665,6 +665,7 @@
                 try {
                     const formData = new FormData();
                     formData.append('receipt', this.selectedFile);
+                    formData.append('currency', this.currency || 'CLP');
 
                     const response = await fetch('{{ url_for("expenses.extract_data") }}', {
                         method: 'POST',

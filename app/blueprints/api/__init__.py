@@ -66,7 +66,7 @@ def _is_admin_like(user):
     return user.role in {UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER}
 
 
-def _parse_amount(value):
+def _parse_amount(value, currency=None):
     if value is None:
         return None
 
@@ -88,6 +88,23 @@ def _parse_amount(value):
     cleaned = cleaned.replace("-", "")
     if not cleaned:
         return None
+
+    if currency == ExpenseCurrency.CLP:
+        last_separator = max(cleaned.rfind("."), cleaned.rfind(","))
+        if last_separator != -1:
+            right = cleaned[last_separator + 1:]
+            left = cleaned[:last_separator]
+            if right.isdigit() and len(right) <= 2:
+                cleaned = left
+        normalized = re.sub(r"[.,]", "", cleaned)
+        if negative:
+            normalized = f"-{normalized}"
+        if not normalized or normalized == "-":
+            return None
+        try:
+            return Decimal(normalized)
+        except InvalidOperation:
+            return None
 
     if "." in cleaned and "," in cleaned:
         last_dot = cleaned.rfind(".")
@@ -782,8 +799,8 @@ def expenses_create():
 
     analyze_receipt = str(data.get("analyze_receipt", "true")).lower() in {"1", "true", "yes", "on"}
 
-    amount = _parse_amount(data.get("amount"))
     currency = _normalize_currency(data.get("currency"))
+    amount = _parse_amount(data.get("amount"), currency=currency)
     exchange_rate = _parse_non_negative_decimal(data.get("exchange_rate"))
     merchant = (data.get("merchant") or "").strip() or None
     client_partner = (data.get("client_partner") or "").strip() or None
@@ -813,7 +830,7 @@ def expenses_create():
             ocr_data = extract_expense_data(receipt_path) or {}
             if ocr_data:
                 if amount is None and ocr_data.get("amount") is not None:
-                    amount = _parse_amount(ocr_data.get("amount"))
+                    amount = _parse_amount(ocr_data.get("amount"), currency=currency)
 
                 if not merchant:
                     merchant = (ocr_data.get("merchant") or "").strip() or None
