@@ -7,9 +7,12 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Gestión de gastos con adjunto de comprobante (imagen/PDF).
 - OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría), incluyendo PDF convertido internamente a imagen para análisis.
 - Vista previa embebida del comprobante en el formulario, con apertura ampliada para imágenes y PDF.
+- En `Mis Gastos`, los comprobantes PDF se muestran con acceso directo correcto al visor ampliado.
 - Normalización de montos para formato local (CLP): separador de miles y decimales.
 - Soporte de gastos en CLP y USD con conversión a CLP para reportes, políticas, dashboard y aprobación.
 - Tipo de gasto `Vehículo particular` con cálculo automático por tramo y boleta opcional de combustible como respaldo.
+- `Mis Gastos` muestra más contexto por gasto (motivo, cliente/partner y datos de kilometraje cuando aplica).
+- Los gastos en borrador pueden editarse mientras no hayan sido enviados a aprobación; si están dentro de una rendición borrador, también pueden quitarse de ella.
 - Detección de duplicados por hash de imagen y por monto/fecha.
 - GPS obligatorio al crear gastos (captura de coordenadas + dirección aproximada).
 - Validación antifraude con score combinado (`match`, `partial`, `mismatch`):
@@ -195,6 +198,13 @@ Secuencia normal de uso:
 2. Ir a `Rendiciones` y agrupar esos gastos.
 3. Crear la rendición en estado borrador.
 4. Enviar la rendición al flujo de aprobación.
+
+Comportamiento en `Mis Gastos`:
+
+- Un gasto `draft` sin rendición puede `Editar` o `Eliminar`.
+- Un gasto `draft` dentro de una rendición `draft` puede `Editar` o `Quitar de Rendición`.
+- Si editas un gasto que ya está dentro de una rendición borrador, el total de la rendición se recalcula automáticamente.
+- Una vez que la rendición fue enviada, el gasto deja de ser editable.
 
 Durante la aprobación puede ocurrir además este ciclo:
 
