@@ -20,6 +20,8 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
   Incluye además regla horaria habitual: L-V entre 09:00 y 19:00.
 - Rendiciones con múltiples gastos.
 - Tipo de rendición: solicitud de devolución o tarjeta corporativa.
+- En `Rendiciones`, los usuarios pueden filtrar sus propias rendiciones por `Pendientes de devolución`, `Pagadas` y `Tarjeta corporativa`.
+- En `Rendiciones -> Finanzas`, los usuarios con permisos financieros pueden subfiltrar por `Pagadas` y `Tarjeta corporativa`.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
 - Solicitud de antecedentes adicionales durante la aprobación, con reenvío al mismo paso del flujo.
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
@@ -232,6 +234,11 @@ Permisos adicionales sobre el usuario:
 - `can_mark_reimbursements_paid`: permite marcar como `paid` las rendiciones aprobadas de tipo `employee_reimbursement`.
 
 Estos permisos son acumulativos y no reemplazan el rol principal. Un mismo usuario puede, por ejemplo, seguir siendo `manager` y además operar como Finanzas.
+
+Vista operativa para Finanzas:
+- `Finanzas -> Todas`: rendiciones visibles para el perfil financiero.
+- `Finanzas -> Pagadas`: rendiciones de devolución ya marcadas como pagadas.
+- `Finanzas -> Tarjeta corporativa`: rendiciones sin devolución al empleado.
 
 Acceso administrativo (`/admin`) requiere rol `admin` o `superadmin`.
 
