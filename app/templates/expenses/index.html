@@ -3,8 +3,8 @@
 {% block title %}Mis Gastos - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
-<div class="py-4">
-    <div class="flex justify-between items-center mb-6">
+<div class="relative left-1/2 -translate-x-1/2 py-4 px-4 sm:px-6 lg:px-8" style="width:min(1540px, calc(100vw - 1rem));">
+    <div class="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-center mb-6">
         <div>
             <h1 class="text-2xl font-bold text-gray-900">Mis Gastos</h1>
             <p class="text-gray-500">Administra tus comprobantes y transacciones</p>
@@ -17,34 +17,35 @@
     <div class="mt-4">
         {% if expenses %}
 
-        <div class="hidden sm:block card overflow-hidden p-0">
+        <div class="hidden sm:block">
+            <div class="card overflow-hidden p-0">
             <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-100">
+                <table class="divide-y divide-gray-100" style="min-width: 1460px;">
                     <thead class="bg-gray-50/50">
                         <tr>
                             <th
-                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[110px]">
                                 Fecha</th>
                             <th
-                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[275px]">
                                 Comercio</th>
                             <th
-                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[150px]">
                                 Categoría</th>
                             <th
-                                class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[130px]">
                                 Monto</th>
                             <th
-                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[120px]">
                                 Estado</th>
                             <th
-                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[120px]">
                                 Validación</th>
                             <th
-                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[110px]">
                                 Comprobante</th>
                             <th
-                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                class="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider min-w-[260px]">
                                 Acciones</th>
                         </tr>
                     </thead>
@@ -53,12 +54,19 @@
                         <tr class="hover:bg-gray-50/50 transition-colors">
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{
                                 expense.date.strftime('%d/%m/%Y') }}</td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{
-                                expense.merchant or ('Vehículo particular' if expense.is_mileage else '-') }}
+                            <td class="px-6 py-4 text-sm font-medium text-gray-900 align-top">
+                                <div class="max-w-[275px]">
+                                    <div class="whitespace-normal break-words leading-snug">{{ expense.merchant or ('Vehículo particular' if expense.is_mileage else '-') }}</div>
                                 {% if expense.is_mileage %}
                                 <div class="mt-1">
                                     <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-100 text-rose-700">Vehículo particular</span>
                                 </div>
+                                {% endif %}
+                                {% if expense.description %}
+                                <div class="text-xs text-gray-600 mt-2 leading-relaxed break-words">{{ expense.description }}</div>
+                                {% endif %}
+                                {% if expense.client_partner %}
+                                <div class="text-[10px] text-gray-500 mt-1">Cliente / Partner: {{ expense.client_partner }}</div>
                                 {% endif %}
                                 {% if expense.is_mileage and expense.distance_km %}
                                 <div class="text-[10px] text-gray-500 mt-1">
@@ -69,6 +77,7 @@
                                 </div>
                                 {% endif %}
                                 <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                                 {% if expense.category %}
@@ -112,30 +121,52 @@
                                 <span class="badge bg-gray-100 text-gray-700">Sin dato</span>
                                 {% endif %}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <td class="px-6 py-4 whitespace-nowrap text-center align-top">
                                 {% if expense.receipt_url %}
+                                {% set is_pdf_receipt = expense.receipt_url.lower().endswith('.pdf') %}
                                 <div class="relative group inline-block">
                                     <button type="button" @click='openReceiptViewer({{ expense.receipt_url|tojson }})'
                                         class="w-10 h-10 rounded-lg border border-gray-100 shadow-sm bg-white p-0.5 transition-transform group-hover:scale-150 group-hover:z-50">
+                                        {% if is_pdf_receipt %}
+                                        <span class="w-full h-full rounded-md bg-rose-50 text-rose-700 flex flex-col items-center justify-center border border-rose-100">
+                                            <span class="i-heroicons-document-text text-sm"></span>
+                                            <span class="text-[8px] font-bold tracking-wide">PDF</span>
+                                        </span>
+                                        {% else %}
                                         <img src="{{ expense.receipt_url }}" loading="lazy"
                                             class="w-full h-full rounded-md object-contain" alt="Comprobante">
+                                        {% endif %}
                                     </button>
                                 </div>
                                 {% else %}
                                 <span class="text-gray-300 i-heroicons-document-minus text-lg"></span>
                                 {% endif %}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-center">
-                                {% if expense.status == 'draft' and not expense.report_id %}
-                                <form action="{{ url_for('expenses.delete', id=expense.id) }}" method="POST"
-                                    onsubmit="return confirm('Este gasto se eliminará definitivamente. ¿Continuar?');">
-                                    <button type="submit"
-                                        class="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-all">
-                                        Eliminar
-                                    </button>
-                                </form>
-                                {% elif expense.report_id and expense.status == 'draft' %}
-                                <span class="text-xs text-gray-400">Quita desde la rendición</span>
+                            <td class="px-6 py-4 text-center align-top">
+                                {% if expense.status == 'draft' and (not expense.report_id or (expense.report and expense.report.status == 'draft')) %}
+                                <div class="flex flex-wrap items-center justify-center gap-2 min-w-[220px]">
+                                    <a href="{{ url_for('expenses.edit', id=expense.id) }}"
+                                        class="inline-flex items-center justify-center rounded-lg border border-primary/20 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary-50 transition-all">
+                                        Editar
+                                    </a>
+                                    {% if not expense.report_id %}
+                                    <form action="{{ url_for('expenses.delete', id=expense.id) }}" method="POST"
+                                        onsubmit="return confirm('Este gasto se eliminará definitivamente. ¿Continuar?');">
+                                        <button type="submit"
+                                            class="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-all">
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                    {% elif expense.report and expense.report.status == 'draft' %}
+                                    <form action="{{ url_for('reports.remove_expense', report_id=expense.report_id, expense_id=expense.id) }}" method="POST"
+                                        onsubmit="return confirm('Este gasto se quitará de la rendición borrador y volverá a Mis Gastos. ¿Continuar?');">
+                                        <button type="submit"
+                                            class="inline-flex items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-all">
+                                            Quitar de Rendición
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                                 {% else %}
                                 <span class="text-xs text-gray-300">No disponible</span>
                                 {% endif %}
@@ -145,6 +176,7 @@
                     </tbody>
                 </table>
             </div>
+        </div>
         </div>
 
         <div class="sm:hidden space-y-3">
@@ -178,6 +210,12 @@
                         <div class="text-[10px] font-mono text-gray-400 mt-1">{{ expense.public_id }}</div>
                         <div class="text-sm font-medium text-gray-500 mt-0.5">{{ expense.category.name if
                             expense.category else 'Sin categoría' }}</div>
+                        {% if expense.description %}
+                        <div class="mt-2 text-sm text-gray-600 leading-relaxed">{{ expense.description }}</div>
+                        {% endif %}
+                        {% if expense.client_partner %}
+                        <div class="mt-1 text-xs text-gray-500">Cliente / Partner: {{ expense.client_partner }}</div>
+                        {% endif %}
                         {% if expense.is_mileage and expense.distance_km %}
                         <div class="text-[10px] text-gray-500 mt-1">
                             {{ "{:,.2f}".format(expense.distance_km) }} km
@@ -201,10 +239,18 @@
                 <div class="flex justify-between items-end mt-4">
                     <div class="flex items-center space-x-2">
                         {% if expense.receipt_url %}
+                        {% set is_pdf_receipt = expense.receipt_url.lower().endswith('.pdf') %}
                         <button type="button" @click='openReceiptViewer({{ expense.receipt_url|tojson }})'
-                            class="w-8 h-8 rounded-lg border border-gray-100 bg-white p-0.5">
+                            class="w-8 h-8 rounded-lg border border-gray-100 bg-white p-0.5 flex items-center justify-center">
+                            {% if is_pdf_receipt %}
+                            <span class="w-full h-full rounded-md bg-rose-50 text-rose-700 flex flex-col items-center justify-center border border-rose-100">
+                                <span class="i-heroicons-document-text text-[11px]"></span>
+                                <span class="text-[7px] font-bold tracking-wide leading-none">PDF</span>
+                            </span>
+                            {% else %}
                             <img src="{{ expense.receipt_url }}" loading="lazy"
                                 class="w-full h-full rounded-md object-contain" alt="Comprobante">
+                            {% endif %}
                         </button>
                         {% else %}
                         <div
@@ -223,16 +269,30 @@
                     </div>
                 </div>
                 <div class="mt-4 flex justify-end">
-                    {% if expense.status == 'draft' and not expense.report_id %}
-                    <form action="{{ url_for('expenses.delete', id=expense.id) }}" method="POST"
-                        onsubmit="return confirm('Este gasto se eliminará definitivamente. ¿Continuar?');">
-                        <button type="submit"
-                            class="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-all">
-                            Eliminar
-                        </button>
-                    </form>
-                    {% elif expense.report_id and expense.status == 'draft' %}
-                    <span class="text-xs text-gray-400">Quita este gasto desde su rendición borrador.</span>
+                    {% if expense.status == 'draft' and (not expense.report_id or (expense.report and expense.report.status == 'draft')) %}
+                    <div class="flex flex-wrap items-center justify-end gap-2">
+                        <a href="{{ url_for('expenses.edit', id=expense.id) }}"
+                            class="inline-flex items-center justify-center rounded-lg border border-primary/20 px-3 py-2 text-xs font-semibold text-primary hover:bg-primary-50 transition-all">
+                            Editar
+                        </a>
+                        {% if not expense.report_id %}
+                        <form action="{{ url_for('expenses.delete', id=expense.id) }}" method="POST"
+                            onsubmit="return confirm('Este gasto se eliminará definitivamente. ¿Continuar?');">
+                            <button type="submit"
+                                class="inline-flex items-center justify-center rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-all">
+                                Eliminar
+                            </button>
+                        </form>
+                        {% elif expense.report and expense.report.status == 'draft' %}
+                        <form action="{{ url_for('reports.remove_expense', report_id=expense.report_id, expense_id=expense.id) }}" method="POST"
+                            onsubmit="return confirm('Este gasto se quitará de la rendición borrador y volverá a Mis Gastos. ¿Continuar?');">
+                            <button type="submit"
+                                class="inline-flex items-center justify-center rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 transition-all">
+                                Quitar de Rendición
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
                     {% endif %}
                 </div>
                 <div

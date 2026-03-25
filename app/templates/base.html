@@ -292,7 +292,7 @@
         openReceiptViewer(url) {
             if (!url) return;
             this.receiptViewerUrl = url;
-            this.receiptViewerIsPdf = /\\.pdf($|\\?)/i.test(url);
+            this.receiptViewerIsPdf = /\.pdf($|\?)/i.test(url);
             this.receiptViewerOpen = true;
             document.body.classList.add('overflow-hidden');
         },
@@ -516,7 +516,7 @@
             </a>
             <a href="{{ url_for('expenses.index') }}"
                 class="{{ 'nav-item-active' if endpoint == 'expenses.index' else 'nav-item' }}">
-                <span class="i-heroicons-receipt-receipt text-2xl mb-1"></span>
+                <span class="i-heroicons-document-text text-2xl mb-1"></span>
                 <span class="text-[10px] font-medium">Gastos</span>
             </a>
             <div class="flex justify-center items-center relative -top-5">

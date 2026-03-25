@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Nuevo Gasto - {{ brand_app_name }}{% endblock %}
+{% block title %}{{ form_title }} - {{ brand_app_name }}{% endblock %}
 
 {% block content %}
 <div class="py-4 max-w-3xl mx-auto px-4 sm:px-0">
     <div class="mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Registrar Nuevo Gasto</h1>
-        <p class="text-gray-500">Ingresa los detalles de tu comprobante</p>
+        <h1 class="text-2xl font-bold text-gray-900">{{ form_title }}</h1>
+        <p class="text-gray-500">{{ form_subtitle }}</p>
     </div>
 
-    <div class="card" x-data="expenseForm()" x-init="init()">
+    <div class="card" x-data='expenseForm({{ initial_expense|tojson if initial_expense else "null" }})' x-init="init()">
         <div x-show="isExtracting && fileName"
             class="absolute inset-0 z-10 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center rounded-2xl"
             x-cloak style="display:none;">
@@ -18,7 +18,7 @@
             <p class="text-sm text-gray-500">Extrayendo montos y comercio</p>
         </div>
 
-        <form method="POST" action="{{ url_for('expenses.new') }}" enctype="multipart/form-data" class="space-y-6">
+        <form method="POST" action="{{ form_action }}" enctype="multipart/form-data" class="space-y-6">
             <div class="space-y-6">
                 <div class="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 text-center">
                     <label class="block text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4"
@@ -163,6 +163,7 @@
                         <label class="block text-sm font-medium text-gray-700 mb-1"
                             x-text="expenseType === 'mileage' ? 'Estación de servicio / respaldo' : 'Comercio / Proveedor *'">Comercio / Proveedor *</label>
                         <input type="text" name="merchant" id="merchant" class="input"
+                            value="{{ expense.merchant if expense else '' }}"
                             :placeholder="expenseType === 'mileage' ? 'Ej. Copec, Shell, Petrobras (opcional)' : 'Ej. Uber, Latam, Restaurante XY'"
                             :required="expenseType === 'receipt'">
                     </div>
@@ -170,18 +171,21 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Cliente / Partner</label>
                         <input type="text" name="client_partner" id="client_partner" class="input"
+                            value="{{ expense.client_partner if expense else '' }}"
                             placeholder="Ej. Acme Corp, Proyecto Z">
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
-                        <input type="date" name="date" id="date" class="input" required @change="updateExchangeRate(true)">
+                        <input type="date" name="date" id="date" class="input" required @change="updateExchangeRate(true)"
+                            value="{{ expense.date.isoformat() if expense and expense.date else '' }}">
                         <p class="mt-1 text-xs text-gray-500">Se valida contra fecha boleta (formato regional DD/MM/YYYY).</p>
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Hora boleta</label>
-                        <input type="time" name="receipt_time" id="receipt_time" class="input">
+                        <input type="time" name="receipt_time" id="receipt_time" class="input"
+                            value="{{ expense.receipt_time.strftime('%H:%M') if expense and expense.receipt_time else '' }}">
                         <p class="mt-1 text-xs text-gray-500">Se compara con la hora de rendición (margen 20 min).</p>
                     </div>
 
@@ -190,7 +194,7 @@
                         <select name="category_id" id="category_id" class="input">
                             <option value="">Seleccione una categoría</option>
                             {% for cat in categories %}
-                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            <option value="{{ cat.id }}" {% if expense and expense.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -236,8 +240,9 @@
                     <div class="md:col-span-2">
                         <label class="block text-sm font-medium text-gray-700 mb-1">Motivo *</label>
                         <textarea name="description" id="description" rows="2" class="input"
-                            :placeholder="expenseType === 'mileage' ? 'Ej. Casa a Lidice - Casa, visita técnica, reunión con cliente.' : 'Explica el motivo del gasto (Mínimo 15 caracteres)'" minlength="15"
-                            required></textarea>
+                            :placeholder="expenseType === 'mileage' ? 'Ej. Casa a Lidice - Casa, visita técnica, reunión con cliente.' : 'Explica el motivo del gasto (Mínimo 15 caracteres)'"
+                            minlength="15"
+                            required>{{ expense.description if expense else '' }}</textarea>
                     </div>
 
                     <div class="md:col-span-2">
@@ -275,7 +280,7 @@
 
                 <div class="pt-5 border-t border-gray-200 flex flex-col sm:flex-row justify-end gap-3">
                     <a href="{{ url_for('expenses.index') }}" class="btn-outline">Cancelar</a>
-                    <button type="submit" class="btn-primary" @click.prevent="submitForm">Guardar Gasto</button>
+                    <button type="submit" class="btn-primary" @click.prevent="submitForm">{{ submit_label }}</button>
                 </div>
             </div>
         </form>
@@ -283,32 +288,41 @@
 </div>
 
 <script>
-    function expenseForm() {
+    function expenseForm(initialData) {
+        const defaultExpenseType = '{{ default_expense_type }}';
+        const defaultFuelPrice = '{{ mileage_defaults.fuel_price_per_liter }}';
+        const defaultEfficiency = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
+        const defaultCorrection = '{{ mileage_defaults.correction_factor }}';
+        const initialExpense = initialData || {};
+
         return {
+            initialExpense,
             isExtracting: false,
-            fileName: '',
-            imagePreviewUrl: null,
+            fileName: initialExpense.receiptName || '',
+            imagePreviewUrl: initialExpense.receiptUrl || null,
             selectedFile: null,
-            expenseType: '{{ default_expense_type }}',
-            currency: 'CLP',
-            exchangeRate: '',
-            amountValue: '',
-            distanceKm: '',
-            fuelPricePerLiter: '{{ mileage_defaults.fuel_price_per_liter }}',
-            vehicleEfficiencyKmL: '{{ mileage_defaults.vehicle_efficiency_km_l }}',
-            correctionFactor: '{{ mileage_defaults.correction_factor }}',
+            expenseType: initialExpense.expenseType || defaultExpenseType,
+            currency: initialExpense.currency || 'CLP',
+            exchangeRate: initialExpense.exchangeRate || '',
+            amountValue: initialExpense.amount || '',
+            distanceKm: initialExpense.distanceKm || '',
+            fuelPricePerLiter: initialExpense.fuelPricePerLiter || defaultFuelPrice,
+            vehicleEfficiencyKmL: initialExpense.vehicleEfficiencyKmL || defaultEfficiency,
+            correctionFactor: initialExpense.correctionFactor || defaultCorrection,
             exchangeRateSource: '',
             exchangeRateMessage: '',
             ocrMessage: '',
             ocrMessageType: 'info',
             previewModalOpen: false,
-            gpsLatitude: '',
-            gpsLongitude: '',
-            gpsAccuracyM: '',
-            gpsCapturedAt: '',
-            gpsAddress: '',
+            gpsLatitude: initialExpense.gpsLatitude || '',
+            gpsLongitude: initialExpense.gpsLongitude || '',
+            gpsAccuracyM: initialExpense.gpsAccuracyM || '',
+            gpsCapturedAt: initialExpense.gpsCapturedAt || '',
+            gpsAddress: initialExpense.gpsAddress || '',
             gpsIsLoading: false,
-            gpsStatusMessage: 'Buscando ubicación GPS...',
+            gpsStatusMessage: initialExpense.gpsLatitude && initialExpense.gpsLongitude
+                ? 'Ubicación GPS cargada desde el gasto.'
+                : 'Buscando ubicación GPS...',
 
             clearPreview() {
                 if (this.imagePreviewUrl && this.imagePreviewUrl.startsWith('blob:')) {
@@ -456,14 +470,16 @@
                     return;
                 }
                 this.distanceKm = '';
-                this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
-                this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
-                this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
+                this.fuelPricePerLiter = defaultFuelPrice;
+                this.vehicleEfficiencyKmL = defaultEfficiency;
+                this.correctionFactor = defaultCorrection;
             },
 
             isPdfFile() {
-                if (!this.selectedFile || !this.fileName) return false;
-                return this.selectedFile.type === 'application/pdf' || this.fileName.toLowerCase().endsWith('.pdf');
+                if (this.selectedFile && this.selectedFile.type === 'application/pdf') {
+                    return true;
+                }
+                return Boolean(this.fileName && this.fileName.toLowerCase().endsWith('.pdf'));
             },
 
             pdfPreviewUrl() {
@@ -488,48 +504,44 @@
                 this.openPreviewModal();
             },
 
+            applyInitialValuesToInputs() {
+                const fields = {
+                    merchant: this.initialExpense.merchant || '',
+                    client_partner: this.initialExpense.clientPartner || '',
+                    date: this.initialExpense.date || '',
+                    receipt_time: this.normalizeTimeForInput(this.initialExpense.receiptTime || ''),
+                    category_id: this.initialExpense.categoryId || '',
+                    description: this.initialExpense.description || ''
+                };
+
+                Object.entries(fields).forEach(([id, value]) => {
+                    const field = document.getElementById(id);
+                    if (field) field.value = value;
+                });
+            },
+
             init() {
                 this.isExtracting = false;
-                this.fileName = '';
-                this.expenseType = '{{ default_expense_type }}';
-                this.currency = 'CLP';
-                this.exchangeRate = '';
-                this.amountValue = '';
-                this.distanceKm = '';
-                this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
-                this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
-                this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
                 this.exchangeRateSource = '';
                 this.exchangeRateMessage = '';
-                this.clearPreview();
-                this.selectedFile = null;
                 this.ocrMessage = '';
                 this.ocrMessageType = 'info';
-                this.recalculateMileageAmount();
-                this.resetGpsState();
-                this.requestLocation(false);
+                this.previewModalOpen = false;
+                this.applyInitialValuesToInputs();
+                if (this.expenseType === 'mileage') {
+                    this.recalculateMileageAmount();
+                } else if (this.currency === 'USD' && this.exchangeRate) {
+                    this.exchangeRateMessage = 'Tipo de cambio cargado desde el gasto.';
+                }
+
+                if (this.hasGpsFix()) {
+                    this.gpsStatusMessage = 'Ubicación GPS cargada desde el gasto.';
+                } else {
+                    this.requestLocation(false);
+                }
+
                 window.addEventListener('pageshow', () => {
                     this.isExtracting = false;
-                    this.fileName = '';
-                    this.expenseType = '{{ default_expense_type }}';
-                    this.currency = 'CLP';
-                    this.exchangeRate = '';
-                    this.amountValue = '';
-                    this.distanceKm = '';
-                    this.fuelPricePerLiter = '{{ mileage_defaults.fuel_price_per_liter }}';
-                    this.vehicleEfficiencyKmL = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
-                    this.correctionFactor = '{{ mileage_defaults.correction_factor }}';
-                    this.exchangeRateSource = '';
-                    this.exchangeRateMessage = '';
-                    this.clearPreview();
-                    this.selectedFile = null;
-                    this.ocrMessage = '';
-                    this.ocrMessageType = 'info';
-                    this.recalculateMileageAmount();
-                    this.resetGpsState();
-                    this.requestLocation(false);
-                    const receiptInput = document.getElementById('receipt');
-                    if (receiptInput) receiptInput.value = '';
                 });
             },
 
@@ -632,9 +644,6 @@
                 this.ocrMessage = '';
                 this.ocrMessageType = 'info';
                 if (!file) {
-                    this.fileName = '';
-                    this.clearPreview();
-                    this.selectedFile = null;
                     return;
                 }
 
