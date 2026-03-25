@@ -168,10 +168,26 @@ def index():
             if report.settlement_type == ReportSettlementType.CORPORATE_CARD
         ],
     }
+    finance_reports = report_views.get('finance', [])
+    finance_payment_views = {
+        'all': finance_reports,
+        'paid': [
+            report for report in finance_reports
+            if report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
+            and report.status == ReportStatus.PAID
+        ],
+        'corporate_card': [
+            report for report in finance_reports
+            if report.settlement_type == ReportSettlementType.CORPORATE_CARD
+        ],
+    }
 
-    current_payment_filter = payment_filter if payment_filter in mine_payment_views else 'all'
+    scope_payment_views = mine_payment_views if current_scope == 'mine' else finance_payment_views if current_scope == 'finance' else {}
+    current_payment_filter = payment_filter if payment_filter in scope_payment_views else 'all'
     if current_scope == 'mine':
         reports = mine_payment_views[current_payment_filter]
+    elif current_scope == 'finance':
+        reports = finance_payment_views[current_payment_filter]
 
     report_ids = [r.id for r in reports]
     expense_counts = {}
@@ -191,6 +207,7 @@ def index():
         current_scope=current_scope,
         current_payment_filter=current_payment_filter,
         mine_payment_views=mine_payment_views,
+        finance_payment_views=finance_payment_views,
         report_views=report_views,
     )
 

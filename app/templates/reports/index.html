@@ -18,6 +18,7 @@
     'finance': 'Rendiciones aprobadas o pagadas visibles para Finanzas, incluyendo las tuyas.'
 } %}
 {% set mine_payment_views = mine_payment_views or {'all': reports} %}
+{% set finance_payment_views = finance_payment_views or {'all': reports} %}
 {% set current_payment_filter = current_payment_filter or 'all' %}
 <div class="py-4">
     <div class="flex justify-between items-center mb-6">
@@ -87,6 +88,27 @@
             Tarjeta corporativa
             {% if mine_payment_views['corporate_card'] %}
             <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'corporate_card' else 'text-primary' }}">{{ mine_payment_views['corporate_card']|length }}</span>
+            {% endif %}
+        </a>
+    </div>
+    {% elif current_scope == 'finance' and finance_payment_views %}
+    <div class="mb-5 flex flex-wrap gap-2">
+        <a href="{{ url_for('reports.index', scope='finance', payment_filter='all') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'all' else 'btn-outline' }}">
+            Todas
+        </a>
+        <a href="{{ url_for('reports.index', scope='finance', payment_filter='paid') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'paid' else 'btn-outline' }}">
+            Pagadas
+            {% if finance_payment_views['paid'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'paid' else 'text-primary' }}">{{ finance_payment_views['paid']|length }}</span>
+            {% endif %}
+        </a>
+        <a href="{{ url_for('reports.index', scope='finance', payment_filter='corporate_card') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'corporate_card' else 'btn-outline' }}">
+            Tarjeta corporativa
+            {% if finance_payment_views['corporate_card'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'corporate_card' else 'text-primary' }}">{{ finance_payment_views['corporate_card']|length }}</span>
             {% endif %}
         </a>
     </div>
@@ -236,6 +258,10 @@
                 No tienes rendiciones pagadas.
                 {% elif current_scope == 'mine' and current_payment_filter == 'corporate_card' %}
                 No tienes rendiciones de tarjeta corporativa.
+                {% elif current_scope == 'finance' and current_payment_filter == 'paid' %}
+                No hay rendiciones pagadas visibles para Finanzas.
+                {% elif current_scope == 'finance' and current_payment_filter == 'corporate_card' %}
+                No hay rendiciones de tarjeta corporativa visibles para Finanzas.
                 {% else %}
                 No has creado ninguna rendición aún.
                 {% endif %}
