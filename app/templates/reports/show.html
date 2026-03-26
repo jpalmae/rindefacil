@@ -41,6 +41,30 @@
             {% if report.description %}
             <p class="text-gray-700 mt-2 ml-8 italic text-sm">"{{ report.description }}"</p>
             {% endif %}
+            {% if report.approval_flow_id and report.approval_flow and report.approval_flow.steps %}
+            {% set total_flow_steps = report.approval_flow.steps|length %}
+            {% if report.status in ['in_review', 'under_review', 'needs_info'] %}
+            <div class="mt-3 ml-8 inline-flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2">
+                <span class="i-heroicons-adjustments-horizontal text-indigo-500 text-sm"></span>
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Paso Actual</p>
+                    <p class="text-sm font-semibold text-indigo-900">
+                        Paso {{ report.current_step or 1 }} de {{ total_flow_steps }}
+                    </p>
+                </div>
+            </div>
+            {% elif report.status in ['approved', 'paid'] %}
+            <div class="mt-3 ml-8 inline-flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2">
+                <span class="i-heroicons-check-badge text-emerald-500 text-sm"></span>
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-widest text-emerald-500">Flujo Completado</p>
+                    <p class="text-sm font-semibold text-emerald-900">
+                        {{ total_flow_steps }} de {{ total_flow_steps }} pasos aprobados
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
         </div>
 
         <!-- Acciones según rol y estado -->
