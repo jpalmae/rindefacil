@@ -375,6 +375,9 @@ def remove_expense(report_id, expense_id):
         return redirect(url_for('reports.show', id=report_id))
 
     try:
+        if expense.id is not None and expense.duplicate_of_id == expense.id:
+            expense.is_duplicate = False
+            expense.duplicate_of_id = None
         expense.report_id = None
         expense.status = ExpenseStatus.DRAFT
         report.total_amount = _recalculate_report_total(report.id)

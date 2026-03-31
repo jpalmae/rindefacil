@@ -298,6 +298,12 @@ def _expense_form_context(expense=None):
     }
 
 
+def _normalize_duplicate_state(expense):
+    if expense.id is not None and expense.duplicate_of_id == expense.id:
+        expense.is_duplicate = False
+        expense.duplicate_of_id = None
+
+
 def _upsert_expense(expense=None):
     is_edit = expense is not None
     redirect_endpoint = url_for('expenses.edit', id=expense.id) if is_edit else url_for('expenses.new')
@@ -413,6 +419,7 @@ def _upsert_expense(expense=None):
                 status=ExpenseStatus.DRAFT,
             )
             db.session.add(expense)
+            db.session.flush()
 
         expense.amount = amount
         expense.currency = currency
@@ -461,7 +468,7 @@ def _upsert_expense(expense=None):
                         Expense.receipt_hash == r_hash,
                         Expense.id != expense.id,
                     ).first()
-                    if existing:
+                    if existing and existing.id != expense.id:
                         expense.is_duplicate = True
                         expense.duplicate_of_id = existing.id
                         flash('¡Atención! Este comprobante parece haber sido subido anteriormente.', 'warning')
@@ -474,10 +481,12 @@ def _upsert_expense(expense=None):
                 Expense.date == expense_date,
                 Expense.id != expense.id,
             ).first()
-            if existing_data:
+            if existing_data and existing_data.id != expense.id:
                 expense.is_duplicate = True
                 expense.duplicate_of_id = existing_data.id
                 flash('Existe un gasto con el mismo monto y fecha. Se ha marcado como posible duplicado.', 'warning')
+
+        _normalize_duplicate_state(expense)
 
         from app.models.policy import Policy
 
@@ -570,6 +579,8 @@ def delete(id):
     try:
         expense_public_id = expense.public_id
         expense_merchant = expense.merchant or 'Sin comercio'
+        _normalize_duplicate_state(expense)
+        db.session.flush()
         db.session.delete(expense)
         db.session.commit()
 

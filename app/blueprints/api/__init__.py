@@ -462,6 +462,10 @@ def _extract_receipt_data_from_file(file_storage, user):
 
 
 def _append_duplicate_flags(expense):
+    if expense.id is not None and expense.duplicate_of_id == expense.id:
+        expense.is_duplicate = False
+        expense.duplicate_of_id = None
+
     if expense.receipt_url:
         local_path = os.path.join(current_app.root_path, expense.receipt_url.lstrip("/"))
         if os.path.exists(local_path):
@@ -473,7 +477,7 @@ def _append_duplicate_flags(expense):
                     Expense.receipt_hash == receipt_hash,
                     Expense.id != expense.id,
                 ).first()
-                if existing:
+                if existing and existing.id != expense.id:
                     expense.is_duplicate = True
                     expense.duplicate_of_id = existing.id
 
@@ -485,9 +489,13 @@ def _append_duplicate_flags(expense):
             Expense.date == expense.date,
             Expense.id != expense.id,
         ).first()
-        if existing_data:
+        if existing_data and existing_data.id != expense.id:
             expense.is_duplicate = True
             expense.duplicate_of_id = existing_data.id
+
+    if expense.id is not None and expense.duplicate_of_id == expense.id:
+        expense.is_duplicate = False
+        expense.duplicate_of_id = None
 
 
 def _policy_warnings_for_expense(expense):
