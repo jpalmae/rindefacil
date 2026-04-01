@@ -152,6 +152,9 @@
         <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
             <p><strong>Vista recomendada para managers:</strong> en <code>Rendiciones</code> existen pestañas separadas para <strong>Pendientes de Mi Aprobación</strong>, <strong>Mis Rendiciones</strong> y, según permisos, <strong>Finanzas</strong>.</p>
         </div>
+        <div class="rounded-xl bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700">
+            <p><strong>Importante:</strong> aunque un usuario tenga rol <code>admin</code>, en flujos activos solo verá y gestionará el paso que realmente le fue asignado.</p>
+        </div>
     </div>
 
     <div class="card space-y-4">
@@ -172,6 +175,12 @@
             </ul>
             <p>
                 Al enviar una rendición, el sistema selecciona el flujo aplicable, mueve la rendición a revisión y notifica al aprobador del paso actual.
+            </p>
+            <p>
+                Cada aprobador ve solo el paso vigente que le corresponde. Si la rendición tiene varios niveles, aprobar el primer paso no la deja aprobada: la mueve al siguiente aprobador.
+            </p>
+            <p>
+                En el detalle de la rendición verás un indicador <strong>Paso X de Y</strong> para saber exactamente en qué nivel del flujo se encuentra.
             </p>
         </div>
     </div>

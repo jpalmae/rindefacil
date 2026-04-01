@@ -262,6 +262,9 @@ Notas operativas:
 - Si existen varios flujos aplicables, el sistema selecciona el de mayor `monto mínimo` y, en empate, el de más pasos.
 - Si el flujo no tiene pasos o no existe uno aplicable, la rendición permanece en borrador.
 - La aprobación afecta a la rendición y actualiza el estado de los gastos que contiene.
+- Cada aprobador ve y gestiona solo el paso actual que realmente le corresponde.
+- Un usuario `admin` no interviene automáticamente en pasos previos de otros aprobadores mientras el flujo siga activo.
+- El detalle de la rendición muestra `Paso X de Y` para reflejar el avance real del flujo.
 - Un aprobador puede pedir antecedentes adicionales sin rechazar la rendición.
 - Cuando el solicitante responde, la rendición vuelve al mismo paso pendiente.
 
