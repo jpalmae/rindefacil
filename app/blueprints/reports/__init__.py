@@ -49,16 +49,13 @@ def _can_mark_report_paid(report):
     )
 
 
-def _can_user_approve_report(report, user=None):
+def _is_user_current_step_approver(report, user=None, allow_admin_override=False):
     user = user or current_user
     if report.company_id != user.company_id or report.status not in REVIEW_STATUSES:
         return False
 
-    if user.has_role('admin'):
-        return True
-
     if not report.approval_flow_id:
-        return user.has_role('manager')
+        return user.has_role('manager') or (allow_admin_override and user.has_role('admin'))
 
     current_step_obj = next(
         (step for step in report.approval_flow.steps if step.step_number == report.current_step),
@@ -73,7 +70,13 @@ def _can_user_approve_report(report, user=None):
         return str(user.id) == current_step_obj.approver_target
     if current_step_obj.approver_type == 'manager':
         return report.user.manager_id == user.id
+    if allow_admin_override and user.has_role('admin'):
+        return True
     return False
+
+
+def _can_user_approve_report(report, user=None):
+    return _is_user_current_step_approver(report, user=user, allow_admin_override=False)
 
 
 def _recalculate_report_total(report_id):
@@ -320,6 +323,7 @@ def show(id):
         expenses=expenses,
         expense_count=len(expenses),
         can_manage_draft_report=_can_manage_draft_report(report),
+        can_approve_now=_can_user_approve_report(report),
         can_mark_report_paid=_can_mark_report_paid(report),
         latest_info_request=next((decision for decision in report.decisions if decision.decision == 'info_requested'), None),
     )
@@ -525,19 +529,7 @@ def approve(id):
         return redirect(url_for('reports.show', id=id))
         
     # Verify if user can approve this step
-    can_approve = False
-    if current_step.approver_type == 'role':
-        if current_user.has_role(current_step.approver_target):
-            can_approve = True
-    elif current_step.approver_type == 'user':
-        if str(current_user.id) == current_step.approver_target:
-            can_approve = True
-    elif current_step.approver_type == 'manager':
-        # Check if user is the manager of the reporter
-        if report.user.manager_id == current_user.id:
-            can_approve = True
-
-    if not can_approve and not current_user.has_role('admin'):
+    if not _is_user_current_step_approver(report, allow_admin_override=False):
         flash('No eres el aprobador designado para este paso.', 'warning')
         return redirect(url_for('reports.show', id=id))
 
@@ -659,15 +651,7 @@ def request_info(id):
             flash('Error en configuración de flujo.', 'danger')
             return redirect(url_for('reports.show', id=id))
 
-        can_review = False
-        if current_step.approver_type == 'role':
-            can_review = current_user.has_role(current_step.approver_target)
-        elif current_step.approver_type == 'user':
-            can_review = str(current_user.id) == current_step.approver_target
-        elif current_step.approver_type == 'manager':
-            can_review = report.user.manager_id == current_user.id
-
-        if not can_review and not current_user.is_admin:
+        if not _is_user_current_step_approver(report, allow_admin_override=False):
             flash('No eres el aprobador designado para este paso.', 'warning')
             return redirect(url_for('reports.show', id=id))
     elif not (current_user.is_admin or current_user.has_role('manager')):

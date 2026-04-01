@@ -89,32 +89,6 @@
             {% endif %}
 
             <!-- Aprobadores: Botones Aprobar/Rechazar (Solo si toca en el flujo) -->
-            {% set can_approve_now = false %}
-            {% if report.status in ['in_review', 'under_review'] %}
-            {% if not report.approval_flow_id %}
-            {% if current_user.has_role('admin') or current_user.has_role('manager') %}
-            {% set can_approve_now = true %}
-            {% endif %}
-            {% else %}
-            {# Validar si el usuario actual es el aprobador del paso actual #}
-            {% set current_step_obj = report.approval_flow.steps|selectattr('step_number', 'equalto',
-            report.current_step)|first %}
-            {% if current_step_obj %}
-            {% if current_step_obj.approver_type == 'role' and current_user.has_role(current_step_obj.approver_target)
-            %}
-            {% set can_approve_now = true %}
-            {% elif current_step_obj.approver_type == 'user' and current_user.id|string ==
-            current_step_obj.approver_target %}
-            {% set can_approve_now = true %}
-            {% elif current_step_obj.approver_type == 'manager' and report.user.manager_id == current_user.id %}
-            {% set can_approve_now = true %}
-            {% elif current_user.has_role('admin') %}
-            {% set can_approve_now = true %}
-            {% endif %}
-            {% endif %}
-            {% endif %}
-            {% endif %}
-
             {% if can_approve_now %}
             <div x-data="{ open: false }" class="w-full sm:w-auto">
                 <button @click="open = true" class="btn bg-success text-white hover:bg-success-dark w-full shadow-md">
