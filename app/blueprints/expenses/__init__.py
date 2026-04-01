@@ -419,7 +419,6 @@ def _upsert_expense(expense=None):
                 status=ExpenseStatus.DRAFT,
             )
             db.session.add(expense)
-            db.session.flush()
 
         expense.amount = amount
         expense.currency = currency
