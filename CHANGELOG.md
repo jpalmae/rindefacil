@@ -4,6 +4,13 @@
 
 Este changelog resume las mejoras aplicadas después del paso a producción en `ia-jp`, desde el 08-03-2026 hasta el 12-03-2026.
 
+## 2026-04-02
+
+### Gastos y comprobantes
+- Corrección preventiva en cargas web de comprobantes para evitar colisiones de nombre de archivo.
+- Los comprobantes subidos desde la web ahora se almacenan con nombre único por `UUID`, alineando el comportamiento con la API.
+- Con esto se evita que dos gastos distintos sobrescriban el mismo archivo cuando el nombre original coincide (por ejemplo `image.jpg`).
+
 ## 2026-03-12
 
 ### Gastos y OCR
