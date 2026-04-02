@@ -5,6 +5,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 ## Funcionalidades principales
 
 - Gestión de gastos con adjunto de comprobante (imagen/PDF).
+- Los comprobantes subidos desde web/API se guardan con nombre único para evitar colisiones y sobreescritura entre gastos distintos.
 - OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría), incluyendo PDF convertido internamente a imagen para análisis.
 - Vista previa embebida del comprobante en el formulario, con apertura ampliada para imágenes y PDF.
 - En `Mis Gastos`, los comprobantes PDF se muestran con acceso directo correcto al visor ampliado.
@@ -286,6 +287,7 @@ Módulos principales:
 - Si OCR no detecta campos, el formulario sigue disponible para carga manual.
 - El endpoint de extracción es `POST /expenses/extract-data`.
 - Archivos se guardan localmente en `app/static/uploads`.
+- Los nombres almacenados incluyen un identificador único por carga, para evitar que dos archivos con el mismo nombre original se sobrescriban.
 - OCR intenta extraer fecha en formato regional `DD/MM/YYYY` y hora `HH:MM` cuando exista.
 - Si el comprobante es PDF, la app convierte la primera página a imagen para OCR y cálculo de hash.
 - El formulario muestra vista previa embebida del comprobante y permite abrirlo en modal ampliado.
