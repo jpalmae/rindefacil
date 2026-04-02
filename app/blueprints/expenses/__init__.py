@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import os
 import re
+import uuid
 
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -23,6 +24,17 @@ expenses_bp = Blueprint('expenses', __name__)
 MILEAGE_DEFAULT_FUEL_PRICE = Decimal('1390')
 MILEAGE_DEFAULT_EFFICIENCY = Decimal('12')
 MILEAGE_DEFAULT_CORRECTION_FACTOR = Decimal('0.8')
+
+
+def _store_uploaded_receipt(file_storage, company_id):
+    filename = secure_filename(file_storage.filename or "receipt")
+    if not filename:
+        filename = "receipt"
+
+    unique_name = f"{company_id}_{uuid.uuid4().hex}_{filename}"
+    file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_name)
+    file_storage.save(file_path)
+    return file_path, f"/static/uploads/{unique_name}"
 
 
 def _parse_amount(value, currency=None):
@@ -453,11 +465,8 @@ def _upsert_expense(expense=None):
         if 'receipt' in request.files:
             file = request.files['receipt']
             if file.filename != '':
-                filename = secure_filename(file.filename)
-                stored_filename = f"{current_user.company_id}_{filename}"
-                file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], stored_filename)
-                file.save(file_path)
-                expense.receipt_url = f"/static/uploads/{stored_filename}"
+                file_path, receipt_url = _store_uploaded_receipt(file, current_user.company_id)
+                expense.receipt_url = receipt_url
 
                 r_hash = calculate_receipt_hash(file_path)
                 expense.receipt_hash = r_hash
