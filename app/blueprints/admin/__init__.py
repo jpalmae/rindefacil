@@ -8,6 +8,7 @@ from sqlalchemy import or_
 from app.extensions import db
 from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog
 from werkzeug.utils import secure_filename
+from app.services.email_service import get_company_email_settings_view, send_test_email
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -404,3 +405,72 @@ def branding():
         company=company,
         branding=settings,
     )
+
+
+@admin_bp.route('/email-settings', methods=['GET', 'POST'])
+def email_settings():
+    company = current_user.company
+    settings = dict(company.settings or {})
+
+    if request.method == 'POST':
+        settings['email_enabled'] = bool(request.form.get('email_enabled'))
+        settings['email_provider'] = 'resend'
+        settings['email_from_name'] = (request.form.get('from_name') or '').strip()
+        settings['email_from_address'] = (request.form.get('from_address') or '').strip().lower()
+        settings['email_reply_to'] = (request.form.get('reply_to') or '').strip().lower()
+        settings['email_test_recipient'] = (request.form.get('test_recipient') or '').strip().lower()
+
+        resend_api_key = (request.form.get('resend_api_key') or '').strip()
+        if resend_api_key:
+            settings['email_resend_api_key'] = resend_api_key
+        elif request.form.get('remove_resend_api_key') == '1':
+            settings.pop('email_resend_api_key', None)
+
+        for key in (
+            'email_notify_report_created',
+            'email_notify_report_submitted',
+            'email_notify_approval_needed',
+            'email_notify_report_approved',
+            'email_notify_report_rejected',
+            'email_notify_report_info_requested',
+            'email_notify_report_paid',
+        ):
+            settings[key] = bool(request.form.get(key))
+
+        if settings['email_enabled']:
+            if not settings.get('email_from_address'):
+                flash('Debes ingresar un correo remitente para habilitar emails.', 'danger')
+                return redirect(url_for('admin.email_settings'))
+            if not settings.get('email_resend_api_key'):
+                flash('Debes ingresar una API key de Resend para habilitar emails.', 'danger')
+                return redirect(url_for('admin.email_settings'))
+
+        company.settings = settings
+        db.session.commit()
+        flash('Configuración de email actualizada.', 'success')
+        return redirect(url_for('admin.email_settings'))
+
+    return render_template(
+        'admin/email_settings.html',
+        company=company,
+        email_settings=get_company_email_settings_view(company),
+    )
+
+
+@admin_bp.route('/email-settings/test', methods=['POST'])
+def email_settings_test():
+    company = current_user.company
+    recipient = (request.form.get('test_recipient') or '').strip().lower()
+    if not recipient:
+        recipient = (get_company_email_settings_view(company).get('test_recipient') or current_user.email or '').strip().lower()
+
+    if not recipient:
+        flash('Debes indicar un destinatario para la prueba.', 'warning')
+        return redirect(url_for('admin.email_settings'))
+
+    if send_test_email(company, recipient):
+        flash(f'Correo de prueba enviado a {recipient}.', 'success')
+    else:
+        flash('No fue posible enviar el correo de prueba. Revisa la configuración de Resend.', 'danger')
+
+    return redirect(url_for('admin.email_settings'))

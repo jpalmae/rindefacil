@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Email - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-6">
+        <a href="{{ url_for('admin.index') }}" class="text-sm text-gray-500 hover:text-primary">← Volver al Panel</a>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">Notificaciones por Email</h1>
+        <p class="text-gray-500 mt-1">Configura Resend y define qué etapas de la rendición enviarán correos para {{ company.name }}.</p>
+    </div>
+
+    <div class="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <div class="card">
+            <form method="POST" class="space-y-6">
+                <div class="flex items-start justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Estado general</h2>
+                        <p class="text-sm text-gray-500 mt-1">Activa o desactiva el envío de emails transaccionales.</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                        <input type="checkbox" name="email_enabled" value="1" {% if email_settings.enabled %}checked{% endif %}>
+                        Habilitar emails
+                    </label>
+                </div>
+
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
+                        <input type="text" class="input bg-gray-50" value="Resend" disabled>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Destinatario de prueba</label>
+                        <input type="email" name="test_recipient" class="input" value="{{ email_settings.test_recipient }}" placeholder="ej. jpalma@sixmanager.com">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Nombre remitente</label>
+                        <input type="text" name="from_name" class="input" value="{{ email_settings.from_name }}" placeholder="Ej. Rinde Fácil">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Correo remitente</label>
+                        <input type="email" name="from_address" class="input" value="{{ email_settings.from_address }}" placeholder="notificaciones@tu-dominio.com">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Reply-To</label>
+                        <input type="email" name="reply_to" class="input" value="{{ email_settings.reply_to }}" placeholder="soporte@tu-dominio.com">
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key Resend</label>
+                        <input type="password" name="resend_api_key" class="input" placeholder="{% if email_settings.has_api_key %}Configurada: {{ email_settings.masked_api_key }}{% else %}re_...{% endif %}">
+                        {% if email_settings.has_api_key %}
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-600 mt-2">
+                            <input type="checkbox" name="remove_resend_api_key" value="1">
+                            Eliminar API key guardada
+                        </label>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div>
+                    <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Eventos a notificar</h2>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_report_created" value="1" {% if email_settings.email_notify_report_created %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Rendición creada</span>
+                                <span class="block text-xs text-gray-500">Confirma al usuario que quedó en borrador.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_report_submitted" value="1" {% if email_settings.email_notify_report_submitted %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Rendición enviada</span>
+                                <span class="block text-xs text-gray-500">Avisa al solicitante que entró al flujo.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_approval_needed" value="1" {% if email_settings.email_notify_approval_needed %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Aprobación pendiente</span>
+                                <span class="block text-xs text-gray-500">Avisa al aprobador efectivo del paso actual.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_report_approved" value="1" {% if email_settings.email_notify_report_approved %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Rendición aprobada</span>
+                                <span class="block text-xs text-gray-500">Avisa aprobación final al solicitante.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_report_rejected" value="1" {% if email_settings.email_notify_report_rejected %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Rendición rechazada</span>
+                                <span class="block text-xs text-gray-500">Avisa el rechazo y el motivo.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3">
+                            <input type="checkbox" name="email_notify_report_info_requested" value="1" {% if email_settings.email_notify_report_info_requested %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Antecedentes solicitados</span>
+                                <span class="block text-xs text-gray-500">Avisa observaciones y reenvío requerido.</span>
+                            </span>
+                        </label>
+                        <label class="flex items-start gap-3 rounded-xl border border-gray-200 p-3 sm:col-span-2">
+                            <input type="checkbox" name="email_notify_report_paid" value="1" {% if email_settings.email_notify_report_paid %}checked{% endif %}>
+                            <span>
+                                <span class="block text-sm font-medium text-gray-800">Rendición pagada</span>
+                                <span class="block text-xs text-gray-500">Confirma al solicitante que la devolución fue pagada.</span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-gray-200 flex justify-end gap-3">
+                    <a href="{{ url_for('admin.index') }}" class="btn-outline">Cancelar</a>
+                    <button type="submit" class="btn-primary">Guardar Configuración</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="space-y-6">
+            <div class="card">
+                <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Prueba de envío</h2>
+                <p class="text-sm text-gray-500 mt-2">Envía un correo de prueba con la configuración actual.</p>
+                <form method="POST" action="{{ url_for('admin.email_settings_test') }}" class="mt-4 space-y-3">
+                    <input type="email" name="test_recipient" class="input" value="{{ email_settings.test_recipient or current_user.email }}" placeholder="destinatario@empresa.com">
+                    <button type="submit" class="btn-primary w-full">Enviar Correo de Prueba</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Notas</h2>
+                <ul class="mt-3 space-y-2 text-sm text-gray-600 list-disc pl-5">
+                    <li>Usa un remitente del dominio configurado en Resend.</li>
+                    <li>Los emails no deben bloquear la operación si el proveedor falla.</li>
+                    <li>En esta fase local, la API key se guarda en la configuración de la empresa.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

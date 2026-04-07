@@ -12,10 +12,13 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 from app.services.export_service import generate_report_pdf
 from app.services.notification_service import (
+    notify_report_created,
     notify_approval_needed,
     notify_report_approved,
     notify_report_info_requested,
+    notify_report_paid,
     notify_report_rejected,
+    notify_report_submitted,
 )
 from app.models import User
 from app.services.audit_service import log_action
@@ -280,6 +283,7 @@ def new():
             
             report.total_amount = total_amount
             db.session.commit()
+            notify_report_created(report)
             
             flash('Informe creado exitosamente.', 'success')
             return redirect(url_for('reports.show', id=report.id))
@@ -466,12 +470,13 @@ def submit(id):
             elif current_step_obj.approver_type == 'manager' and report.user.manager_id:
                 notify_approval_needed(report.user.manager_id, report)
             
+        db.session.commit()
+        notify_report_submitted(report)
+
         if is_resubmitting_info:
             flash('Antecedentes adicionales reenviados al mismo aprobador.', 'success')
         else:
             flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
-            
-        db.session.commit()
         
         log_action(
             action='report_resubmitted_with_info' if is_resubmitting_info else 'report_submitted',
@@ -717,6 +722,7 @@ def mark_paid(id):
             expense.status = ExpenseStatus.PAID
 
         db.session.commit()
+        notify_report_paid(report)
 
         log_action(
             action='report_paid',

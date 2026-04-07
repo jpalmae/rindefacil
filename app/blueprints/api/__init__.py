@@ -33,9 +33,12 @@ from app.models import (
 from app.services.location_service import evaluate_expense_integrity, reverse_geocode
 from app.services.notification_service import (
     notify_approval_needed,
+    notify_report_created,
     notify_report_approved,
     notify_report_info_requested,
+    notify_report_paid,
     notify_report_rejected,
+    notify_report_submitted,
 )
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
@@ -1140,6 +1143,7 @@ def reports_create():
         )
 
         db.session.commit()
+        notify_report_created(report)
 
         return _ok({"report": _serialize_report(report, expense_count=len(expenses))}, status=201)
     except Exception as exc:
@@ -1285,6 +1289,7 @@ def reports_submit(report_id):
         )
 
         db.session.commit()
+        notify_report_submitted(report)
 
         return _ok({"message": action_msg, "report": _serialize_report(report)})
     except Exception as exc:
@@ -1562,6 +1567,7 @@ def reports_mark_paid(report_id):
         )
 
         db.session.commit()
+        notify_report_paid(report)
         return _ok({"message": "Rendicion marcada como pagada.", "report": _serialize_report(report)})
     except Exception as exc:
         db.session.rollback()
