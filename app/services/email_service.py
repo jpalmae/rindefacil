@@ -88,6 +88,31 @@ def _build_sender(from_name, from_address):
     return f"{from_name} <{from_address}>" if from_name else from_address
 
 
+def _append_email_disclaimer(body_text, body_html=None, app_name='Rinde Fácil'):
+    text_disclaimer = (
+        '---\n'
+        f'Este es un correo automático de {app_name}. '
+        'No respondas a este mensaje, ya que esta casilla no es monitoreada.'
+    )
+    html_disclaimer = (
+        '<hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;">'
+        '<p style="margin:0;color:#6b7280;font-size:12px;line-height:1.6;">'
+        f'Este es un correo automático de <strong>{app_name}</strong>. '
+        'No respondas a este mensaje, ya que esta casilla no es monitoreada.'
+        '</p>'
+    )
+    text = (body_text or '').rstrip()
+    html = body_html.rstrip() if body_html else None
+
+    if text_disclaimer not in text:
+        text = f'{text}\n\n{text_disclaimer}' if text else text_disclaimer
+
+    if html is not None and html_disclaimer not in html:
+        html = f'{html}{html_disclaimer}'
+
+    return text, html
+
+
 def _send_via_resend(company, subject, recipients, body_text, body_html=None, reply_to=None):
     config = _company_email_settings(company)
     api_key = config['resend_api_key']
@@ -158,11 +183,19 @@ def send_email(subject, recipients, body_text, body_html=None, company=None, rep
 
     app_name, _ = _company_branding(company)
     branded_subject = f'[{app_name}] {subject}'
+    final_body_text, final_body_html = _append_email_disclaimer(body_text, body_html, app_name=app_name)
 
     if config['provider'] == 'resend':
-        return _send_via_resend(company, branded_subject, recipients, body_text, body_html=body_html, reply_to=reply_to)
+        return _send_via_resend(
+            company,
+            branded_subject,
+            recipients,
+            final_body_text,
+            body_html=final_body_html,
+            reply_to=reply_to,
+        )
 
-    return _send_via_smtp(branded_subject, recipients, body_text, body_html=body_html)
+    return _send_via_smtp(branded_subject, recipients, final_body_text, body_html=final_body_html)
 
 
 def send_test_email(company, recipient):
