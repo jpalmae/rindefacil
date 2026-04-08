@@ -24,6 +24,7 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - En `Rendiciones`, los usuarios pueden filtrar sus propias rendiciones por `Pendientes de devolución`, `Pagadas` y `Tarjeta corporativa`.
 - En `Rendiciones -> Finanzas`, los usuarios con permisos financieros pueden subfiltrar por `Pagadas` y `Tarjeta corporativa`.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
+- Si un paso del flujo usa `manager` y el solicitante no tiene manager asignado, el sistema omite ese paso y avanza automáticamente al siguiente aprobador válido.
 - Solicitud de antecedentes adicionales durante la aprobación, con reenvío al mismo paso del flujo.
 - Notificaciones in-app y envío de correos para aprobaciones/rechazos.
 - Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
@@ -268,6 +269,7 @@ Notas operativas:
 - El detalle de la rendición muestra `Paso X de Y` para reflejar el avance real del flujo.
 - Un aprobador puede pedir antecedentes adicionales sin rechazar la rendición.
 - Cuando el solicitante responde, la rendición vuelve al mismo paso pendiente.
+- Si un paso configurado como `manager` no tiene destinatario porque el solicitante no posee manager asignado, el sistema lo omite y continúa con el siguiente paso del flujo.
 
 ### Administración
 

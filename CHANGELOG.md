@@ -2,7 +2,18 @@
 
 ## Producción `ia-jp`
 
-Este changelog resume las mejoras aplicadas después del paso a producción en `ia-jp`, desde el 08-03-2026 hasta el 12-03-2026.
+Este changelog resume las mejoras aplicadas después del paso a producción en `ia-jp`.
+
+## 2026-04-07
+
+### Flujos y aprobación
+- Fallback automático para pasos `manager` cuando el solicitante no tiene manager asignado.
+- En ese caso, la rendición omite el paso sin destinatario y avanza al siguiente aprobador válido.
+- Si no existe un aprobador posterior en el flujo, la rendición puede cerrarse automáticamente según la lógica del flujo.
+- Ajuste equivalente en web y API para mantener la misma resolución del paso activo y la misma visibilidad de aprobación.
+
+### Documentación
+- README y guía de usuario actualizados para explicar el comportamiento de flujos cuando un solicitante no tiene manager.
 
 ## 2026-04-02
 
