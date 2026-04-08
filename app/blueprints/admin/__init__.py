@@ -1,5 +1,6 @@
 import os
 import time
+from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
 from flask_login import login_required, current_user
@@ -34,6 +35,20 @@ def _normalize_user_email(raw_email, default_domain=''):
     if default_domain:
         return f"{email}@{default_domain}"
     return email
+
+
+def _sanitize_public_app_url(value):
+    raw = (value or '').strip()
+    if not raw:
+        return ''
+
+    candidate = raw if '://' in raw else f'https://{raw}'
+    parsed = urlparse(candidate)
+    if parsed.scheme != 'https' or not parsed.netloc:
+        return None
+
+    normalized = f'https://{parsed.netloc}{parsed.path or ""}'.rstrip('/')
+    return normalized
 
 
 def _finance_permissions_from_form(form):
@@ -349,13 +364,18 @@ def branding():
     if request.method == 'POST':
         app_name = (request.form.get('app_name') or '').strip()
         default_domain = _sanitize_domain(request.form.get('default_domain'))
+        app_url = _sanitize_public_app_url(request.form.get('app_url'))
 
         if not app_name:
             flash('El nombre de la app es obligatorio.', 'danger')
             return redirect(url_for('admin.branding'))
+        if app_url is None:
+            flash('La URL pública debe ser https y tener un dominio válido.', 'danger')
+            return redirect(url_for('admin.branding'))
 
         settings['brand_app_name'] = app_name
         settings['brand_user_default_domain'] = default_domain
+        settings['brand_app_url'] = app_url or ''
         settings.pop('brand_default_domain', None)
 
         if request.form.get('remove_logo') == '1':

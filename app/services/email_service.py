@@ -36,6 +36,7 @@ def _company_branding(company=None):
         settings = current_user.company.settings or {}
 
     app_name = settings.get('brand_app_name') or app_name
+    base_url = settings.get('brand_app_url') or base_url
 
     return app_name, base_url.rstrip('/')
 

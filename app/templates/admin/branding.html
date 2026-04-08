@@ -7,7 +7,7 @@
     <div class="mb-6">
         <a href="{{ url_for('admin.index') }}" class="text-sm text-gray-500 hover:text-primary">← Volver al Panel</a>
         <h1 class="text-2xl font-bold text-gray-900 mt-2">Branding de la App</h1>
-        <p class="text-gray-500 mt-1">Configura nombre, logo y dominio de correo por defecto para {{ company.name }}.</p>
+        <p class="text-gray-500 mt-1">Configura nombre, logo, URL pública y dominio de correo por defecto para {{ company.name }}.</p>
     </div>
 
     <div class="card">
@@ -25,6 +25,14 @@
                     value="{{ branding.get('brand_user_default_domain') or branding.get('brand_default_domain') or brand_default_domain or '' }}"
                     placeholder="empresa.com">
                 <p class="text-xs text-gray-500 mt-1">Se usa para correos de usuarios (ej: juan@empresa.com).</p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">URL pública de la app</label>
+                <input type="text" name="app_url" class="input"
+                    value="{{ branding.get('brand_app_url') or '' }}"
+                    placeholder="https://rinde.sixmanager.io">
+                <p class="text-xs text-gray-500 mt-1">Se usa en correos y enlaces externos. Debe comenzar con <code>https://</code>.</p>
             </div>
 
             <div>
