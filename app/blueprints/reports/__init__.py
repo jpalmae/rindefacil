@@ -60,10 +60,7 @@ def _is_user_current_step_approver(report, user=None, allow_admin_override=False
     if not report.approval_flow_id:
         return user.has_role('manager') or (allow_admin_override and user.has_role('admin'))
 
-    current_step_obj = next(
-        (step for step in report.approval_flow.steps if step.step_number == report.current_step),
-        None,
-    )
+    current_step_obj, _ = _resolve_active_step(report, persist=False)
     if not current_step_obj:
         return False
 
@@ -80,6 +77,52 @@ def _is_user_current_step_approver(report, user=None, allow_admin_override=False
 
 def _can_user_approve_report(report, user=None):
     return _is_user_current_step_approver(report, user=user, allow_admin_override=False)
+
+
+def _step_requires_missing_manager(report, step):
+    return step and step.approver_type == 'manager' and not report.user.manager_id
+
+
+def _resolve_active_step(report, persist=False):
+    if not report.approval_flow_id:
+        return None, []
+
+    steps_by_number = {step.step_number: step for step in report.approval_flow.steps}
+    current_number = report.current_step or 1
+    skipped_steps = []
+
+    while True:
+        current_step_obj = steps_by_number.get(current_number)
+        if not current_step_obj:
+            if persist and current_number != report.current_step:
+                report.current_step = current_number
+            return None, skipped_steps
+
+        if _step_requires_missing_manager(report, current_step_obj):
+            skipped_steps.append(current_number)
+            current_number += 1
+            continue
+
+        if persist and current_number != report.current_step:
+            report.current_step = current_number
+        return current_step_obj, skipped_steps
+
+
+def _notify_step_if_needed(report, step):
+    if step is None:
+        return
+
+    if step.approver_type == 'role':
+        potential_approvers = User.query.filter_by(
+            company_id=report.company_id,
+            role=step.approver_target,
+        ).all()
+        for approver in potential_approvers:
+            notify_approval_needed(approver.id, report)
+    elif step.approver_type == 'user':
+        notify_approval_needed(step.approver_target, report)
+    elif step.approver_type == 'manager' and report.user.manager_id:
+        notify_approval_needed(report.user.manager_id, report)
 
 
 def _recalculate_report_total(report_id):
@@ -312,6 +355,8 @@ def show(id):
     if not _can_view_report(report):
         flash('No tienes permiso para ver este informe.', 'danger')
         return redirect(url_for('dashboard.index'))
+
+    _resolve_active_step(report, persist=True)
         
     expenses = Expense.query.options(
         selectinload(Expense.category)
@@ -454,29 +499,32 @@ def submit(id):
         for exp in report.expenses:
             exp.status = ExpenseStatus.SUBMITTED
             
-        # Notify current approver
-        current_step_obj = ApprovalStep.query.filter_by(
-            flow_id=report.approval_flow_id,
-            step_number=report.current_step
-        ).first()
-        if current_step_obj:
-            # Find users that match this step to notify
-            if current_step_obj.approver_type == 'role':
-                potential_approvers = User.query.filter_by(company_id=current_user.company_id, role=current_step_obj.approver_target).all()
-                for approver in potential_approvers:
-                    notify_approval_needed(approver.id, report)
-            elif current_step_obj.approver_type == 'user':
-                notify_approval_needed(current_step_obj.approver_target, report)
-            elif current_step_obj.approver_type == 'manager' and report.user.manager_id:
-                notify_approval_needed(report.user.manager_id, report)
-            
-        db.session.commit()
-        notify_report_submitted(report)
+        current_step_obj, skipped_steps = _resolve_active_step(report, persist=True)
 
-        if is_resubmitting_info:
-            flash('Antecedentes adicionales reenviados al mismo aprobador.', 'success')
+        if current_step_obj:
+            _notify_step_if_needed(report, current_step_obj)
+            db.session.commit()
+            notify_report_submitted(report)
+
+            if is_resubmitting_info:
+                flash('Antecedentes adicionales reenviados al mismo aprobador.', 'success')
+            elif skipped_steps:
+                flash(
+                    f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}. '
+                    'Se omitió el paso de manager porque el solicitante no tiene manager asignado.',
+                    'success',
+                )
+            else:
+                flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
         else:
-            flash(f'Informe enviado a revisión siguiendo el flujo: {selected_flow.name}', 'success')
+            report.status = ReportStatus.APPROVED
+            report.approved_at = datetime.utcnow()
+            for exp in report.expenses:
+                exp.status = ExpenseStatus.APPROVED
+
+            db.session.commit()
+            notify_report_approved(report)
+            flash('La rendición quedó aprobada automáticamente porque no había aprobadores disponibles en el flujo.', 'info')
         
         log_action(
             action='report_resubmitted_with_info' if is_resubmitting_info else 'report_submitted',
@@ -524,13 +572,10 @@ def approve(id):
         return redirect(url_for('reports.show', id=id))
 
     # Flow based logic
-    current_step = ApprovalStep.query.filter_by(
-        flow_id=report.approval_flow_id, 
-        step_number=report.current_step
-    ).first()
+    current_step, skipped_steps = _resolve_active_step(report, persist=True)
     
     if not current_step:
-        flash('Error en configuración de flujo.', 'danger')
+        flash('No existen aprobadores disponibles para el paso actual del flujo.', 'warning')
         return redirect(url_for('reports.show', id=id))
         
     # Verify if user can approve this step
@@ -550,22 +595,15 @@ def approve(id):
         db.session.add(decision)
         
         # Check for next step
-        next_step = ApprovalStep.query.filter_by(
-            flow_id=report.approval_flow_id,
-            step_number=report.current_step + 1
-        ).first()
+        report.current_step += 1
+        next_step, skipped_steps = _resolve_active_step(report, persist=True)
         if next_step:
-            report.current_step += 1
-            if next_step.approver_type == 'role':
-                potential_approvers = User.query.filter_by(company_id=current_user.company_id, role=next_step.approver_target).all()
-                for approver in potential_approvers:
-                    notify_approval_needed(approver.id, report)
-            elif next_step.approver_type == 'user':
-                notify_approval_needed(next_step.approver_target, report)
-            elif next_step.approver_type == 'manager' and report.user.manager_id:
-                notify_approval_needed(report.user.manager_id, report)
-            
-            flash('Paso aprobado. El informe avanza al siguiente nivel.', 'info')
+            _notify_step_if_needed(report, next_step)
+
+            if skipped_steps:
+                flash('Paso aprobado. Se omitió un paso de manager sin asignación y la rendición avanzó al siguiente aprobador.', 'info')
+            else:
+                flash('Paso aprobado. El informe avanza al siguiente nivel.', 'info')
         else:
             # Final approval
             report.status = ReportStatus.APPROVED

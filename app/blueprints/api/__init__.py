@@ -551,6 +551,35 @@ def _current_step(report):
     ).first()
 
 
+def _step_requires_missing_manager(report, step):
+    return step and step.approver_type == "manager" and not (report.user and report.user.manager_id)
+
+
+def _resolve_active_step(report, persist=False):
+    if not report.approval_flow_id:
+        return None, []
+
+    steps_by_number = {step.step_number: step for step in report.approval_flow.steps}
+    current_number = report.current_step or 1
+    skipped_steps = []
+
+    while True:
+        current_step_obj = steps_by_number.get(current_number)
+        if not current_step_obj:
+            if persist and current_number != report.current_step:
+                report.current_step = current_number
+            return None, skipped_steps
+
+        if _step_requires_missing_manager(report, current_step_obj):
+            skipped_steps.append(current_number)
+            current_number += 1
+            continue
+
+        if persist and current_number != report.current_step:
+            report.current_step = current_number
+        return current_step_obj, skipped_steps
+
+
 def _user_can_review_step(user, report, step):
     if step is None:
         return False
@@ -1165,7 +1194,7 @@ def reports_pending_approvals():
 
     actionable = []
     for report in reports:
-        step = _current_step(report)
+        step, _ = _resolve_active_step(report, persist=False)
         if _user_can_review_step(user, report, step):
             actionable.append(
                 {
@@ -1199,6 +1228,8 @@ def reports_detail(report_id):
 
     if not _user_can_view_report(user, report):
         return _error("No tienes permisos para ver esta rendicion.", status=403, code="forbidden")
+
+    _resolve_active_step(report, persist=True)
 
     return _ok(
         {
@@ -1272,13 +1303,22 @@ def reports_submit(report_id):
         for expense in report.expenses:
             expense.status = ExpenseStatus.SUBMITTED
 
-        step = _current_step(report)
-        _notify_step_if_needed(report, step)
-        action_msg = (
-            "Antecedentes adicionales reenviados al mismo aprobador."
-            if is_resubmitting_info
-            else f"Rendicion enviada a flujo '{selected_flow.name}'."
-        )
+        step, skipped_steps = _resolve_active_step(report, persist=True)
+        if step:
+            _notify_step_if_needed(report, step)
+            action_msg = (
+                "Antecedentes adicionales reenviados al mismo aprobador."
+                if is_resubmitting_info
+                else f"Rendicion enviada a flujo '{selected_flow.name}'."
+            )
+            if skipped_steps and not is_resubmitting_info:
+                action_msg += " Se omitió el paso de manager porque el solicitante no tiene manager asignado."
+        else:
+            report.status = ReportStatus.APPROVED
+            report.approved_at = datetime.utcnow()
+            for expense in report.expenses:
+                expense.status = ExpenseStatus.APPROVED
+            action_msg = "La rendicion quedo aprobada automaticamente porque no habia aprobadores disponibles en el flujo."
 
         _audit(
             user,
@@ -1289,7 +1329,10 @@ def reports_submit(report_id):
         )
 
         db.session.commit()
-        notify_report_submitted(report)
+        if step:
+            notify_report_submitted(report)
+        else:
+            notify_report_approved(report)
 
         return _ok({"message": action_msg, "report": _serialize_report(report)})
     except Exception as exc:
@@ -1343,7 +1386,7 @@ def reports_approve(report_id):
             current_app.logger.error("Error aprobando rendicion via API: %s", exc)
             return _error("No se pudo aprobar la rendicion.", status=500, code="server_error")
 
-    step = _current_step(report)
+    step, _ = _resolve_active_step(report, persist=True)
     if not _user_can_review_step(user, report, step):
         return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
 
@@ -1366,16 +1409,17 @@ def reports_approve(report_id):
         )
         db.session.add(decision)
 
-        next_step = ApprovalStep.query.filter_by(
-            flow_id=report.approval_flow_id,
-            step_number=report.current_step + 1,
-        ).first()
+        report.current_step += 1
+        next_step, skipped_steps = _resolve_active_step(report, persist=True)
 
         if next_step:
-            report.current_step += 1
             report.status = ReportStatus.UNDER_REVIEW
             _notify_step_if_needed(report, next_step)
-            message = "Paso aprobado. Se notifico al siguiente aprobador."
+            message = (
+                "Paso aprobado. Se omitió un paso de manager sin asignación y se notificó al siguiente aprobador."
+                if skipped_steps
+                else "Paso aprobado. Se notifico al siguiente aprobador."
+            )
         else:
             report.status = ReportStatus.APPROVED
             report.approved_at = datetime.utcnow()
@@ -1425,7 +1469,7 @@ def reports_reject(report_id):
         return _error("La rendicion no esta actualmente en revision.", status=409, code="invalid_state")
 
     if report.approval_flow_id:
-        step = _current_step(report)
+        step, _ = _resolve_active_step(report, persist=True)
         if not _user_can_review_step(user, report, step):
             return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
     elif not _is_admin_like(user):
@@ -1498,7 +1542,7 @@ def reports_request_info(report_id):
         return _error("La rendicion no esta actualmente en revision.", status=409, code="invalid_state")
 
     if report.approval_flow_id:
-        step = _current_step(report)
+        step, _ = _resolve_active_step(report, persist=True)
         if not _user_can_review_step(user, report, step):
             return _error("No eres el aprobador designado para este paso.", status=403, code="forbidden")
     elif not _is_admin_like(user):
