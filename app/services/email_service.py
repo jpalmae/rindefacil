@@ -28,6 +28,7 @@ EMAIL_EVENT_DEFAULTS = {
 def _company_branding(company=None):
     app_name = current_app.config.get('APP_NAME', 'Rinde Fácil')
     base_url = current_app.config.get('APP_URL', 'http://localhost:5000')
+    logo_url = ''
 
     settings = {}
     if company is not None:
@@ -37,8 +38,9 @@ def _company_branding(company=None):
 
     app_name = settings.get('brand_app_name') or app_name
     base_url = settings.get('brand_app_url') or base_url
+    logo_url = settings.get('brand_logo_url') or ''
 
-    return app_name, base_url.rstrip('/')
+    return app_name, base_url.rstrip('/'), _absolute_brand_asset_url(logo_url, base_url)
 
 
 def _company_email_settings(company=None):
@@ -89,6 +91,47 @@ def _build_sender(from_name, from_address):
     return f"{from_name} <{from_address}>" if from_name else from_address
 
 
+def _absolute_brand_asset_url(asset_url, base_url):
+    if not asset_url:
+        return ''
+    if asset_url.startswith('http://') or asset_url.startswith('https://'):
+        return asset_url
+
+    normalized_base = (base_url or '').rstrip('/')
+    if not normalized_base:
+        return asset_url
+    if asset_url.startswith('/'):
+        return f'{normalized_base}{asset_url}'
+    return f'{normalized_base}/{asset_url}'
+
+
+def _render_email_html(
+    company,
+    *,
+    title,
+    greeting,
+    paragraphs,
+    action_url=None,
+    action_label=None,
+    facts=None,
+    preheader=None,
+    eyebrow=None,
+):
+    app_name, _, logo_url = _company_branding(company)
+    return current_app.jinja_env.get_template('emails/notification.html').render(
+        app_name=app_name,
+        logo_url=logo_url,
+        title=title,
+        greeting=greeting,
+        paragraphs=paragraphs or [],
+        action_url=action_url,
+        action_label=action_label,
+        facts=facts or [],
+        preheader=preheader or title,
+        eyebrow=eyebrow or app_name,
+    )
+
+
 def _append_email_disclaimer(body_text, body_html=None, app_name='Rinde Fácil'):
     text_disclaimer = (
         '---\n'
@@ -109,7 +152,10 @@ def _append_email_disclaimer(body_text, body_html=None, app_name='Rinde Fácil')
         text = f'{text}\n\n{text_disclaimer}' if text else text_disclaimer
 
     if html is not None and html_disclaimer not in html:
-        html = f'{html}{html_disclaimer}'
+        if '</body>' in html:
+            html = html.replace('</body>', f'{html_disclaimer}</body>')
+        else:
+            html = f'{html}{html_disclaimer}'
 
     return text, html
 
@@ -182,7 +228,7 @@ def send_email(subject, recipients, body_text, body_html=None, company=None, rep
         current_app.logger.info('Company email notifications disabled. Skip sending email.')
         return False
 
-    app_name, _ = _company_branding(company)
+    app_name, _, _ = _company_branding(company)
     branded_subject = f'[{app_name}] {subject}'
     final_body_text, final_body_html = _append_email_disclaimer(body_text, body_html, app_name=app_name)
 
@@ -202,78 +248,165 @@ def send_email(subject, recipients, body_text, body_html=None, company=None, rep
 def send_test_email(company, recipient):
     if not recipient:
         return False
-    app_name, _ = _company_branding(company)
+    app_name, _, _ = _company_branding(company)
     subject = 'Prueba de configuración de email'
     body_text = (
         f'Hola,\n\n'
         f'Este es un correo de prueba enviado desde {app_name}.\n\n'
         f'Si recibiste este mensaje, la configuración de Resend quedó operativa.'
     )
-    body_html = (
-        f'<p>Hola,</p>'
-        f'<p>Este es un correo de prueba enviado desde <strong>{app_name}</strong>.</p>'
-        f'<p>Si recibiste este mensaje, la configuración de Resend quedó operativa.</p>'
+    body_html = _render_email_html(
+        company,
+        title='Prueba de configuración de email',
+        greeting='Hola,',
+        paragraphs=[
+            f'Este es un correo de prueba enviado desde {app_name}.',
+            'Si recibiste este mensaje, la configuración de Resend quedó operativa.',
+        ],
+        preheader='Prueba de configuración de email',
     )
     return send_email(subject, [recipient], body_text, body_html=body_html, company=company)
 
 
 def send_report_created_email(user, report):
-    app_name, base_url = _company_branding(report.company)
+    app_name, base_url, _ = _company_branding(report.company)
     subject = f'Rendición creada: {report.title}'
     path = f'/reports/{report.id}'
+    action_url = f'{base_url}{path}'
     body_text = (
         f'Hola {user.full_name},\n\n'
         f'Tu rendición "{report.title}" fue creada en estado borrador.\n\n'
-        f'Revísala en {app_name}: {base_url}{path}'
+        f'Revísala en {app_name}: {action_url}'
     )
-    return send_email(subject, [user.email], body_text, company=report.company)
+    body_html = _render_email_html(
+        report.company,
+        title='Rendición creada',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[
+            f'Tu rendición "{report.title}" fue creada en estado borrador.',
+            'Puedes revisarla, completar antecedentes y enviarla a aprobación cuando esté lista.',
+        ],
+        facts=[
+            ('Rendición', report.title),
+            ('Estado', 'Borrador'),
+        ],
+        action_url=action_url,
+        action_label='Abrir rendición',
+        preheader=f'Rendición creada: {report.title}',
+    )
+    return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
 
 
 def send_report_submitted_email(user, report):
-    app_name, base_url = _company_branding(report.company)
+    app_name, base_url, _ = _company_branding(report.company)
     subject = f'Rendición enviada: {report.title}'
     path = f'/reports/{report.id}'
+    action_url = f'{base_url}{path}'
     body_text = (
         f'Hola {user.full_name},\n\n'
         f'Tu rendición "{report.title}" fue enviada al flujo de aprobación.\n\n'
-        f'Ver detalle en {app_name}: {base_url}{path}'
+        f'Ver detalle en {app_name}: {action_url}'
     )
-    return send_email(subject, [user.email], body_text, company=report.company)
+    body_html = _render_email_html(
+        report.company,
+        title='Rendición enviada',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[
+            f'Tu rendición "{report.title}" fue enviada al flujo de aprobación.',
+            'Te notificaremos cuando exista un cambio de estado o una solicitud de antecedentes adicionales.',
+        ],
+        facts=[
+            ('Rendición', report.title),
+            ('Estado', 'En revisión'),
+        ],
+        action_url=action_url,
+        action_label='Ver rendición',
+        preheader=f'Rendición enviada: {report.title}',
+    )
+    return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
 
 
 def send_approval_request_email(user, report):
-    app_name, base_url = _company_branding(report.company)
+    app_name, base_url, _ = _company_branding(report.company)
     report_path = f'/reports/{report.id}'
+    action_url = f'{base_url}{report_path}'
     subject = f'Acción requerida: Aprobación de rendición #{report.id.hex[:8]}'
     body_text = (
         f'Hola {user.full_name},\n\n'
         f'Tienes una rendición pendiente de aprobación: {report.title} de {report.user.full_name}.\n\n'
-        f'Revisa en {app_name}: {base_url}{report_path}'
+        f'Revisa en {app_name}: {action_url}'
     )
-    return send_email(subject, [user.email], body_text, company=report.company)
+    body_html = _render_email_html(
+        report.company,
+        title='Aprobación pendiente',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[
+            f'Tienes una rendición pendiente de aprobación: "{report.title}" de {report.user.full_name}.',
+            'Revísala y decide si apruebas, rechazas o solicitas antecedentes adicionales.',
+        ],
+        facts=[
+            ('Rendición', report.title),
+            ('Solicitante', report.user.full_name),
+        ],
+        action_url=action_url,
+        action_label='Gestionar aprobación',
+        preheader=f'Aprobación pendiente: {report.title}',
+    )
+    return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
 
 
 def send_report_status_email(user, report, status, reason=None):
-    app_name, base_url = _company_branding(report.company)
+    app_name, base_url, _ = _company_branding(report.company)
     report_path = f'/reports/{report.id}'
+    action_url = f'{base_url}{report_path}'
     subject = f'Tu rendición fue {status}'
     body_text = (
         f'Hola {user.full_name},\n\n'
         f'Tu rendición "{report.title}" fue {status}.\n\n'
-        f'Ver detalle en {app_name}: {base_url}{report_path}'
+        f'Ver detalle en {app_name}: {action_url}'
     )
     if reason:
         body_text += f'\nMotivo: {reason}'
-    return send_email(subject, [user.email], body_text, company=report.company)
+    body_html = _render_email_html(
+        report.company,
+        title=f'Rendición {status}',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[f'Tu rendición "{report.title}" fue {status}.'] + ([f'Motivo: {reason}'] if reason else []),
+        facts=[
+            ('Rendición', report.title),
+            ('Estado', status.capitalize()),
+        ] + ([('Motivo', reason)] if reason else []),
+        action_url=action_url,
+        action_label='Ver detalle',
+        preheader=f'Rendición {status}: {report.title}',
+    )
+    return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
 
 
 def send_report_paid_email(user, report):
-    app_name, base_url = _company_branding(report.company)
+    app_name, base_url, _ = _company_branding(report.company)
     report_path = f'/reports/{report.id}'
+    action_url = f'{base_url}{report_path}'
     subject = f'Rendición pagada: {report.title}'
     body_text = (
         f'Hola {user.full_name},\n\n'
         f'Tu rendición "{report.title}" fue marcada como pagada.\n\n'
-        f'Ver detalle en {app_name}: {base_url}{report_path}'
+        f'Ver detalle en {app_name}: {action_url}'
     )
-    return send_email(subject, [user.email], body_text, company=report.company)
+    body_html = _render_email_html(
+        report.company,
+        title='Rendición pagada',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[
+            f'Tu rendición "{report.title}" fue marcada como pagada.',
+            'Ya puedes revisarla en la aplicación para consultar el detalle.',
+        ],
+        facts=[
+            ('Rendición', report.title),
+            ('Estado', 'Pagada'),
+        ],
+        action_url=action_url,
+        action_label='Ver rendición',
+        preheader=f'Rendición pagada: {report.title}',
+    )
+    return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
