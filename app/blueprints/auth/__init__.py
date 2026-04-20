@@ -15,14 +15,14 @@ auth_bp = Blueprint('auth', __name__)
 
 
 def _temporary_password_value():
-    return (current_app.config.get('TEMP_PASSWORD') or 'Sixman123.,').strip()
+    return (current_app.config.get('TEMP_PASSWORD') or '').strip()
 
 
 @auth_bp.before_app_request
 def enforce_temporary_password_change():
     if not current_user.is_authenticated:
         return None
-    if not session.get('must_change_password'):
+    if not current_user.must_change_password:
         return None
 
     endpoint = request.endpoint or ''
@@ -52,14 +52,14 @@ def login():
 
             login_user(user, remember=remember)
             user.last_login = datetime.utcnow()
-            db.session.commit()
-
-            if password == _temporary_password_value():
-                session['must_change_password'] = True
+            temp_password = _temporary_password_value()
+            if user.must_change_password or (temp_password and password == temp_password):
+                user.must_change_password = True
+                db.session.commit()
                 flash('Debes cambiar tu contraseña temporal antes de continuar.', 'warning')
                 return redirect(url_for('auth.force_password_change'))
 
-            session.pop('must_change_password', None)
+            db.session.commit()
             flash('Sesión iniciada correctamente.', 'success')
             next_page = request.args.get('next')
             return redirect(next_page or url_for('dashboard.index'))
@@ -72,7 +72,7 @@ def login():
 @auth_bp.route('/force-password-change', methods=['GET', 'POST'])
 @login_required
 def force_password_change():
-    if not session.get('must_change_password'):
+    if not current_user.must_change_password:
         return redirect(url_for('dashboard.index'))
 
     if request.method == 'POST':
@@ -95,8 +95,8 @@ def force_password_change():
             return render_template('auth/force_password_change.html')
 
         current_user.set_password(new_password)
+        current_user.must_change_password = False
         db.session.commit()
-        session.pop('must_change_password', None)
         flash('Contraseña actualizada correctamente.', 'success')
         return redirect(url_for('dashboard.index'))
 
@@ -230,6 +230,7 @@ def profile():
         
         if password:
             current_user.set_password(password)
+            current_user.must_change_password = False
             
         # Handle Avatar/Signature uploads
         from werkzeug.utils import secure_filename

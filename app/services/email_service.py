@@ -3,6 +3,7 @@ from app.extensions import mail
 from flask import current_app, has_request_context
 from flask_login import current_user
 import requests
+from app.services.secrets_service import decrypt_setting
 
 EMAIL_EVENT_SETTINGS = {
     'report_created': 'email_notify_report_created',
@@ -50,13 +51,20 @@ def _company_email_settings(company=None):
     elif has_request_context() and current_user.is_authenticated:
         settings = dict(current_user.company.settings or {})
 
+    raw_resend_api_key = settings.get('email_resend_api_key') or ''
+    try:
+        resend_api_key = (decrypt_setting(raw_resend_api_key) or '').strip()
+    except RuntimeError as exc:
+        current_app.logger.error('Could not decrypt Resend API key: %s', exc)
+        resend_api_key = ''
+
     return {
         'enabled': bool(settings.get('email_enabled')),
         'provider': (settings.get('email_provider') or 'resend').strip().lower(),
         'from_name': (settings.get('email_from_name') or settings.get('brand_app_name') or current_app.config.get('APP_NAME', 'Rinde Fácil')).strip(),
         'from_address': (settings.get('email_from_address') or current_app.config.get('MAIL_DEFAULT_SENDER') or '').strip(),
         'reply_to': (settings.get('email_reply_to') or '').strip(),
-        'resend_api_key': (settings.get('email_resend_api_key') or '').strip(),
+        'resend_api_key': resend_api_key,
         'test_recipient': (settings.get('email_test_recipient') or '').strip(),
         **{key: bool(settings.get(key, default)) for key, default in EMAIL_EVENT_DEFAULTS.items()},
     }

@@ -4,7 +4,10 @@ from datetime import timedelta
 
 class Config:
     """Base configuration."""
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'default-dev-secret-key-change-in-prod')
+    DEFAULT_SECRET_KEY = 'default-dev-secret-key-change-in-prod'
+    DEFAULT_TEMP_PASSWORD = 'Sixman123.,'
+
+    SECRET_KEY = os.environ.get('SECRET_KEY', DEFAULT_SECRET_KEY)
 
     # SQLAlchemy
     SQLALCHEMY_DATABASE_URI = os.environ.get(
@@ -29,8 +32,9 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'noreply@sixmanager.local')
     APP_NAME = os.environ.get('APP_NAME', 'Rinde Fácil')
     APP_URL = os.environ.get('APP_URL', 'http://localhost:5000')
-    TEMP_PASSWORD = os.environ.get('TEMP_PASSWORD', 'Sixman123.,')
+    TEMP_PASSWORD = os.environ.get('TEMP_PASSWORD', DEFAULT_TEMP_PASSWORD)
     CMF_API_KEY = os.environ.get('CMF_API_KEY')
+    SETTINGS_ENCRYPTION_KEY = os.environ.get('SETTINGS_ENCRYPTION_KEY')
 
 
 class DevelopmentConfig(Config):

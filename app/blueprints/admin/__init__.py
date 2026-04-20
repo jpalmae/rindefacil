@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog
 from werkzeug.utils import secure_filename
 from app.services.email_service import get_company_email_settings_view, send_test_email
+from app.services.secrets_service import can_encrypt_settings, encrypt_setting
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -111,6 +112,7 @@ def user_new():
             cost_center_id=cost_center_id if cost_center_id else None,
             can_view_approved_reports=can_view_approved_reports,
             can_mark_reimbursements_paid=can_mark_reimbursements_paid,
+            must_change_password=True,
         )
         user.set_password(password)
         db.session.add(user)
@@ -163,6 +165,7 @@ def user_edit(user_id):
         password = request.form.get('password')
         if password:
             user.set_password(password)
+            user.must_change_password = True
             
         try:
             db.session.commit()
@@ -442,7 +445,10 @@ def email_settings():
 
         resend_api_key = (request.form.get('resend_api_key') or '').strip()
         if resend_api_key:
-            settings['email_resend_api_key'] = resend_api_key
+            if not can_encrypt_settings():
+                flash('Falta SETTINGS_ENCRYPTION_KEY en el servidor para guardar secretos de email.', 'danger')
+                return redirect(url_for('admin.email_settings'))
+            settings['email_resend_api_key'] = encrypt_setting(resend_api_key)
         elif request.form.get('remove_resend_api_key') == '1':
             settings.pop('email_resend_api_key', None)
 

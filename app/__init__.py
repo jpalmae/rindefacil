@@ -14,6 +14,16 @@ def create_app(config_name=None):
     app = Flask(__name__)
     app.config.from_object(config[config_name])
 
+    if config_name == 'production':
+        secret_key = app.config.get('SECRET_KEY') or ''
+        temp_password = app.config.get('TEMP_PASSWORD') or ''
+        if secret_key == app.config.get('DEFAULT_SECRET_KEY'):
+            raise RuntimeError('SECRET_KEY must be configured explicitly in production.')
+        if temp_password == app.config.get('DEFAULT_TEMP_PASSWORD'):
+            raise RuntimeError('TEMP_PASSWORD must be configured explicitly in production.')
+        if not app.config.get('SETTINGS_ENCRYPTION_KEY'):
+            raise RuntimeError('SETTINGS_ENCRYPTION_KEY must be configured in production.')
+
     # Inicializar directorio de uploads
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
