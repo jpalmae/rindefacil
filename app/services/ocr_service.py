@@ -117,7 +117,7 @@ def extract_expense_data(image_path):
         - "merchant": Nombre comercial del proveedor o comercio (si no hay, devuelve null).
         - "date": Fecha del gasto en formato DD/MM/YYYY (si no hay, devuelve null).
         - "time": Hora del comprobante en formato HH:MM (24h). Si no está visible, devuelve null.
-        - "category": Clasifica el gasto en una de las siguientes opciones: "Viajes", "Alimentación", "Hospedaje", "Suministros", u "Otros".
+        - "category": Clasifica el gasto en una de las siguientes opciones: "Viajes", "Alimentación", "Hospedaje", "Suministros", "Gasto Administrativo", u "Otros".
         """
 
         response = client.chat.completions.create(

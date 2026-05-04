@@ -19,7 +19,7 @@ def seed_database():
         db.session.flush()
 
         # Create Categories
-        cats = ["Viajes", "Alimentación", "Hospedaje", "Suministros"]
+        cats = ["Viajes", "Alimentación", "Hospedaje", "Suministros", "Gasto Administrativo"]
         for c in cats:
             db.session.add(Category(company_id=demo_company.id, name=c))
         
