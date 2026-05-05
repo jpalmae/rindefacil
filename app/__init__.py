@@ -70,6 +70,7 @@ def create_app(config_name=None):
         brand_logo_url = None
         brand_icon_url = None
         brand_default_domain = ''
+        brand_theme = 'executive'
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
             unread_count = notifications_q.filter_by(is_read=False).count()
@@ -79,6 +80,7 @@ def create_app(config_name=None):
             brand_app_name = company_settings.get('brand_app_name') or brand_app_name
             brand_logo_url = company_settings.get('brand_logo_url') or None
             brand_icon_url = company_settings.get('brand_icon_url') or None
+            brand_theme = company_settings.get('brand_theme') or brand_theme
             brand_default_domain = (
                 company_settings.get('brand_user_default_domain')
                 or company_settings.get('brand_default_domain')
@@ -91,6 +93,7 @@ def create_app(config_name=None):
                 brand_app_name = company_settings.get('brand_app_name') or brand_app_name
                 brand_logo_url = company_settings.get('brand_logo_url') or None
                 brand_icon_url = company_settings.get('brand_icon_url') or None
+                brand_theme = company_settings.get('brand_theme') or brand_theme
                 brand_default_domain = (
                     company_settings.get('brand_user_default_domain')
                     or company_settings.get('brand_default_domain')
@@ -105,6 +108,7 @@ def create_app(config_name=None):
             brand_logo_url=brand_logo_url,
             brand_icon_url=brand_icon_url,
             brand_default_domain=brand_default_domain,
+            brand_theme=brand_theme,
         )
 
     # Security Headers

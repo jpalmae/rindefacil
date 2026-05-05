@@ -363,11 +363,13 @@ def audit_logs():
 def branding():
     company = current_user.company
     settings = dict(company.settings or {})
+    allowed_themes = {'executive', 'paper', 'midnight', 'rose'}
 
     if request.method == 'POST':
         app_name = (request.form.get('app_name') or '').strip()
         default_domain = _sanitize_domain(request.form.get('default_domain'))
         app_url = _sanitize_public_app_url(request.form.get('app_url'))
+        brand_theme = (request.form.get('brand_theme') or 'executive').strip()
 
         if not app_name:
             flash('El nombre de la app es obligatorio.', 'danger')
@@ -375,10 +377,13 @@ def branding():
         if app_url is None:
             flash('La URL pública debe ser https y tener un dominio válido.', 'danger')
             return redirect(url_for('admin.branding'))
+        if brand_theme not in allowed_themes:
+            brand_theme = 'executive'
 
         settings['brand_app_name'] = app_name
         settings['brand_user_default_domain'] = default_domain
         settings['brand_app_url'] = app_url or ''
+        settings['brand_theme'] = brand_theme
         settings.pop('brand_default_domain', None)
 
         if request.form.get('remove_logo') == '1':

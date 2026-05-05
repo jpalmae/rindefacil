@@ -36,6 +36,18 @@
             </div>
 
             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tema visual</label>
+                <select name="brand_theme" class="input">
+                    {% set current_brand_theme = branding.get('brand_theme') or brand_theme or 'executive' %}
+                    <option value="executive" {% if current_brand_theme == 'executive' %}selected{% endif %}>Executive</option>
+                    <option value="paper" {% if current_brand_theme == 'paper' %}selected{% endif %}>Paper</option>
+                    <option value="midnight" {% if current_brand_theme == 'midnight' %}selected{% endif %}>Midnight</option>
+                    <option value="rose" {% if current_brand_theme == 'rose' %}selected{% endif %}>Rose</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Se usa como tema por defecto de la app y en el encabezado de los correos.</p>
+            </div>
+
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Ícono de la App</label>
                 <input type="file" name="icon" accept=".ico,.png,.jpg,.jpeg,.webp,.svg,image/*" class="input">
                 <p class="text-xs text-gray-500 mt-1">Se usa en la pestaña del navegador y encabezados de la app.</p>

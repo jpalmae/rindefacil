@@ -15,7 +15,7 @@
                 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:640px;margin:0 auto;">
                     <tr>
                         <td style="padding:0 20px 20px 20px;">
-                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:linear-gradient(135deg,#111827 0%,#1f2937 100%);border-radius:20px;overflow:hidden;">
+                            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="{{ theme.header_bg }}" style="background-color:{{ theme.header_bg }};background-image:linear-gradient(135deg,{{ theme.header_bg }} 0%,{{ theme.header_bg_2 }} 100%);border-radius:20px;overflow:hidden;">
                                 <tr>
                                     <td style="padding:28px 32px;">
                                         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
@@ -24,8 +24,8 @@
                                                     {% if logo_url %}
                                                     <img src="{{ logo_url }}" alt="Logo {{ app_name }}" style="display:block;max-height:44px;max-width:180px;height:auto;width:auto;margin:0 0 14px 0;">
                                                     {% endif %}
-                                                    <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#cbd5e1;font-weight:700;">{{ eyebrow or app_name }}</div>
-                                                    <h1 style="margin:10px 0 0 0;font-size:28px;line-height:1.2;color:#ffffff;font-weight:800;">{{ title }}</h1>
+                                                    <div style="font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:{{ theme.eyebrow_color }};font-weight:800;">{{ eyebrow or app_name }}</div>
+                                                    <h1 style="margin:10px 0 0 0;font-size:28px;line-height:1.2;color:{{ theme.title_color }};font-weight:800;">{{ title }}</h1>
                                                 </td>
                                             </tr>
                                         </table>
@@ -61,7 +61,7 @@
                                         {% if action_url and action_label %}
                                         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 22px 0;">
                                             <tr>
-                                                <td align="center" bgcolor="#111827" style="border-radius:12px;">
+                                                <td align="center" bgcolor="{{ theme.button_bg }}" style="border-radius:12px;background-color:{{ theme.button_bg }};">
                                                     <a href="{{ action_url }}" style="display:inline-block;padding:14px 22px;font-size:14px;line-height:1;color:#ffffff;text-decoration:none;font-weight:700;">{{ action_label }}</a>
                                                 </td>
                                             </tr>

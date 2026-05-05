@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es" data-theme="executive">
+<html lang="es" data-theme="{{ brand_theme or 'executive' }}">
 
 <head>
     <meta charset="UTF-8">
@@ -254,7 +254,7 @@
 
 <body class="bg-gray-50 text-gray-900 font-sans antialiased"
     x-data="{
-        theme: 'executive',
+        theme: '{{ brand_theme or "executive" }}',
         sidebarOpen: false,
         userMenuOpen: false,
         receiptViewerOpen: false,
@@ -263,9 +263,9 @@
         initTheme() {
             try {
                 const saved = localStorage.getItem('sixrinde-theme');
-                this.applyTheme(saved || 'executive', false);
+                this.applyTheme(saved || '{{ brand_theme or "executive" }}', false);
             } catch (_) {
-                this.applyTheme('executive', false);
+                this.applyTheme('{{ brand_theme or "executive" }}', false);
             }
         },
         applyTheme(nextTheme, persist = true) {

@@ -25,6 +25,37 @@ EMAIL_EVENT_DEFAULTS = {
     'email_notify_report_paid': True,
 }
 
+EMAIL_THEME_PALETTES = {
+    'executive': {
+        'header_bg': '#0f766e',
+        'header_bg_2': '#115e59',
+        'eyebrow_color': '#ecfdf5',
+        'title_color': '#ffffff',
+        'button_bg': '#0f766e',
+    },
+    'paper': {
+        'header_bg': '#9a5d21',
+        'header_bg_2': '#7c4212',
+        'eyebrow_color': '#fffbeb',
+        'title_color': '#ffffff',
+        'button_bg': '#9a5d21',
+    },
+    'midnight': {
+        'header_bg': '#0a1222',
+        'header_bg_2': '#101a2e',
+        'eyebrow_color': '#e0f2fe',
+        'title_color': '#ffffff',
+        'button_bg': '#0ea5b8',
+    },
+    'rose': {
+        'header_bg': '#d14d87',
+        'header_bg_2': '#b5366f',
+        'eyebrow_color': '#fff1f7',
+        'title_color': '#ffffff',
+        'button_bg': '#d14d87',
+    },
+}
+
 
 def _company_branding(company=None):
     app_name = current_app.config.get('APP_NAME', 'Rinde Fácil')
@@ -42,6 +73,17 @@ def _company_branding(company=None):
     logo_url = settings.get('brand_logo_url') or ''
 
     return app_name, base_url.rstrip('/'), _absolute_brand_asset_url(logo_url, base_url)
+
+
+def _company_email_theme(company=None):
+    settings = {}
+    if company is not None:
+        settings = company.settings or {}
+    elif has_request_context() and current_user.is_authenticated:
+        settings = current_user.company.settings or {}
+
+    theme = settings.get('brand_theme') or 'executive'
+    return EMAIL_THEME_PALETTES.get(theme, EMAIL_THEME_PALETTES['executive'])
 
 
 def _company_email_settings(company=None):
@@ -129,6 +171,7 @@ def _render_email_html(
     return current_app.jinja_env.get_template('emails/notification.html').render(
         app_name=app_name,
         logo_url=logo_url,
+        theme=_company_email_theme(company),
         title=title,
         greeting=greeting,
         paragraphs=paragraphs or [],
