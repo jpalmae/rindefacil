@@ -82,7 +82,7 @@ def extract_expense_data(image_path):
     para extraer Fecha, Monto, Comercio y Categoría.
     """
     api_key = os.environ.get('OPENROUTER_API_KEY')
-    model_name = os.environ.get('OPENROUTER_MODEL_OCR', 'google/gemini-2.5-flash')
+    model_name = os.environ.get('OPENROUTER_MODEL_OCR', 'openai/gpt-4o-mini')
     
     if not api_key:
         current_app.logger.warning("No OPENROUTER_API_KEY en variables de entorno. OCR skip.")
