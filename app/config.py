@@ -1,5 +1,20 @@
 import os
 from datetime import timedelta
+from urllib.parse import quote_plus
+
+
+def _build_database_uri():
+    explicit = os.environ.get('DATABASE_URL')
+    if explicit:
+        return explicit
+    pg_host = os.environ.get('POSTGRES_HOST')
+    if pg_host:
+        pg_port = os.environ.get('POSTGRES_PORT', '5432')
+        pg_db = os.environ.get('POSTGRES_DB', 'postgres')
+        pg_user = os.environ.get('POSTGRES_USER', 'postgres')
+        pg_pass = os.environ.get('POSTGRES_PASSWORD', '')
+        return f'postgresql+psycopg://{quote_plus(pg_user)}:{quote_plus(pg_pass)}@{pg_host}:{pg_port}/{pg_db}'
+    return 'postgresql+psycopg://sixmanager:sixmanager@localhost/sixmanager_gastos'
 
 
 class Config:
@@ -10,10 +25,7 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', DEFAULT_SECRET_KEY)
 
     # SQLAlchemy
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL',
-        'postgresql+psycopg://sixmanager:sixmanager@localhost/sixmanager_gastos'
-    )
+    SQLALCHEMY_DATABASE_URI = _build_database_uri()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # Session
