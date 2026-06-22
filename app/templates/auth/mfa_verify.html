@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Verificación en Dos Pasos - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md">
+        <div class="card shadow-sm rounded-2xl p-8">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-primary-light text-primary mb-3">
+                    <span class="i-heroicons-shield-check text-3xl"></span>
+                </div>
+                <h2 class="text-3xl font-bold text-gray-900 mb-2">Verificación en Dos Pasos</h2>
+                <p class="text-gray-500">Ingresa el código de 6 dígitos que enviamos a tu correo</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('auth.mfa_verify') }}" class="space-y-4"
+                x-data="{ code: '' }">
+                <div>
+                    <label for="code" class="block text-sm font-medium text-gray-700 mb-1">Código de verificación</label>
+                    <input
+                        type="text"
+                        inputmode="numeric"
+                        pattern="[0-9]{6}"
+                        maxlength="6"
+                        id="code"
+                        name="code"
+                        x-model="code"
+                        class="input w-full text-center text-2xl tracking-[0.5em] font-bold"
+                        placeholder="000000"
+                        required
+                        autofocus
+                        autocomplete="one-time-code">
+                    <p class="text-xs text-gray-400 mt-1">El código vence en 10 minutos.</p>
+                </div>
+
+                <div class="pt-4">
+                    <button type="submit" class="btn-primary w-full py-2.5">Verificar</button>
+                </div>
+            </form>
+
+            <form method="POST" action="{{ url_for('auth.mfa_resend') }}" class="mt-6 text-center">
+                <button type="submit" class="text-sm text-primary hover:text-primary-dark font-semibold">Reenviar código</button>
+            </form>
+
+            <div class="mt-8 text-center text-sm text-gray-600">
+                <a href="{{ url_for('auth.login') }}" class="text-gray-500 hover:text-gray-700 font-medium">Cancelar y volver</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

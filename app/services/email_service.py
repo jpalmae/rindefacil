@@ -270,13 +270,20 @@ def _send_via_smtp(subject, recipients, body_text, body_html=None):
         return False
 
 
-def send_email(subject, recipients, body_text, body_html=None, company=None, reply_to=None):
+def send_email(subject, recipients, body_text, body_html=None, company=None, reply_to=None, force_send=False):
     if not recipients:
         return False
 
     config = _company_email_settings(company)
-    if not config['enabled']:
+    if not config['enabled'] and not force_send:
         current_app.logger.info('Company email notifications disabled. Skip sending email.')
+        return False
+
+    if force_send and not config['resend_api_key']:
+        current_app.logger.warning('Forced email requested but Resend API key missing. Skip sending email.')
+        return False
+    if force_send and not config['from_address']:
+        current_app.logger.warning('Forced email requested but sender address missing. Skip sending email.')
         return False
 
     app_name, _, _ = _company_branding(company)
@@ -461,3 +468,76 @@ def send_report_paid_email(user, report):
         preheader=f'Rendición pagada: {report.title}',
     )
     return send_email(subject, [user.email], body_text, body_html=body_html, company=report.company)
+
+
+def send_password_reset_email(user, company, reset_url):
+    app_name, _, _ = _company_branding(company)
+    subject = 'Recuperación de contraseña'
+    body_text = (
+        f'Hola {user.full_name},\n\n'
+        f'Recibimos una solicitud para restablecer tu contraseña en {app_name}.\n\n'
+        f'Usa el siguiente enlace para crear una nueva contraseña (vence en 30 minutos):\n'
+        f'{reset_url}\n\n'
+        f'Si no solicitaste este cambio, puedes ignorar este correo: tu contraseña no será modificada.'
+    )
+    body_html = _render_email_html(
+        company,
+        title='Recupera tu contraseña',
+        greeting=f'Hola {user.full_name},',
+        paragraphs=[
+            'Recibimos una solicitud para restablecer tu contraseña.',
+            'Haz clic en el botón para crear una nueva. El enlace vence en 30 minutos.',
+            'Si no fuiste tú, ignora este correo: tu contraseña no será cambiada.',
+        ],
+        action_url=reset_url,
+        action_label='Restablecer contraseña',
+        preheader='Recupera tu contraseña',
+        eyebrow='Seguridad',
+    )
+    return send_email(
+        subject,
+        [user.email],
+        body_text,
+        body_html=body_html,
+        company=company,
+        force_send=True,
+    )
+
+
+def send_mfa_code_email(user, company, code, purpose='login'):
+    app_name, _, _ = _company_branding(company)
+    if purpose == 'setup':
+        title = 'Activa tu verificación en dos pasos'
+        subject = 'Código para activar verificación en dos pasos'
+        paragraphs = [
+            'Usa el siguiente código para confirmar la activación de la verificación en dos pasos.',
+            'Una vez activada, cada vez que inicies sesión pediremos un código como este a tu correo.',
+        ]
+    else:
+        title = 'Tu código de verificación'
+        subject = 'Código de verificación de acceso'
+        paragraphs = [
+            'Usa el siguiente código para completar tu acceso:',
+        ]
+    body_text = (
+        f'Hola {user.full_name},\n\n'
+        f'Tu código de verificación para {app_name} es: {code}\n\n'
+        f'El código vence en 10 minutos. Si no solicitaste este correo, puedes ignorarlo.'
+    )
+    body_html = _render_email_html(
+        company,
+        title=title,
+        greeting=f'Hola {user.full_name},',
+        paragraphs=paragraphs,
+        facts=[('Código', code), ('Vigencia', '10 minutos')],
+        preheader=f'Tu código de verificación es {code}',
+        eyebrow='Seguridad',
+    )
+    return send_email(
+        subject,
+        [user.email],
+        body_text,
+        body_html=body_html,
+        company=company,
+        force_send=True,
+    )

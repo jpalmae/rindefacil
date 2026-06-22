@@ -27,6 +27,7 @@ class User(UserMixin, db.Model):
     can_view_approved_reports = db.Column(db.Boolean, nullable=False, default=False)
     can_mark_reimbursements_paid = db.Column(db.Boolean, nullable=False, default=False)
     must_change_password = db.Column(db.Boolean, nullable=False, default=False)
+    mfa_enabled = db.Column(db.Boolean, nullable=False, default=False)
     avatar_url = db.Column(db.String(500))
     signature_url = db.Column(db.String(500))
     is_active = db.Column(db.Boolean, default=True)
