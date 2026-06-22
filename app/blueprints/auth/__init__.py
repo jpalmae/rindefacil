@@ -102,7 +102,7 @@ def login():
                 user.must_change_password or (temp_password and password == temp_password)
             )
 
-            if user.mfa_enabled:
+            if user.is_mfa_required:
                 _invalidate_user_mfa_codes(user, MFA_CODE_PURPOSE_LOGIN)
                 code, raw_code = MfaCode.build_for_user(user, MFA_CODE_PURPOSE_LOGIN)
                 db.session.add(code)
@@ -560,6 +560,9 @@ def mfa_setup():
 @auth_bp.route('/profile/mfa/disable', methods=['POST'])
 @login_required
 def mfa_disable():
+    if current_user.company_mfa_enforced:
+        flash('La verificación en dos pasos es obligatoria para tu empresa y no puedes desactivarla.', 'warning')
+        return redirect(url_for('auth.profile'))
     password = request.form.get('password') or ''
     if not current_user.check_password(password):
         flash('La contraseña ingresada no es correcta.', 'danger')

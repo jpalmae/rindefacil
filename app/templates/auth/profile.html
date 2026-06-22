@@ -59,7 +59,24 @@
                 <h3 class="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
                     <span class="i-heroicons-lock-closed"></span> Verificación en dos pasos
                 </h3>
+                {% if current_user.company_mfa_enforced %}
+                <div class="flex items-center gap-2 text-xs text-primary font-medium mb-3">
+                    <span class="i-heroicons-shield-check"></span> Obligatoria por la empresa
+                </div>
+                <p class="text-xs text-gray-500 leading-relaxed mb-4">
+                    Tu empresa exige verificación en dos pasos. Cada inicio de sesión pedirá un código
+                    enviado a tu correo.
+                </p>
                 {% if current_user.mfa_enabled %}
+                <p class="text-[11px] text-gray-400 italic">
+                    Además activaste verificación voluntaria; la política de empresa ya estaba cubierta.
+                </p>
+                {% else %}
+                <p class="text-[11px] text-gray-400 italic">
+                    No puedes desactivar esta protección mientras la política esté activa.
+                </p>
+                {% endif %}
+                {% elif current_user.mfa_enabled %}
                 <div class="flex items-center gap-2 text-xs text-green-600 font-medium mb-3">
                     <span class="i-heroicons-check-badge"></span> Activada
                 </div>

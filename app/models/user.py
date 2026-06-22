@@ -60,6 +60,17 @@ class User(UserMixin, db.Model):
         return self.role in [UserRole.SUPERADMIN, UserRole.ADMIN]
 
     @property
+    def company_mfa_enforced(self):
+        """True si la empresa del usuario exige verificación en dos pasos."""
+        settings = (self.company.settings or {}) if self.company else {}
+        return bool(settings.get('mfa_enforced'))
+
+    @property
+    def is_mfa_required(self):
+        """True si el usuario debe completar MFA al iniciar sesión (propio o por política)."""
+        return bool(self.mfa_enabled) or self.company_mfa_enforced
+
+    @property
     def has_finance_report_access(self):
         return self.is_admin or self.can_view_approved_reports or self.can_mark_reimbursements_paid
 

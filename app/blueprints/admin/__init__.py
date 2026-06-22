@@ -505,3 +505,29 @@ def email_settings_test():
         flash('No fue posible enviar el correo de prueba. Revisa la configuración de Resend.', 'danger')
 
     return redirect(url_for('admin.email_settings'))
+
+
+@admin_bp.route('/security', methods=['GET', 'POST'])
+def security():
+    company = current_user.company
+    settings = dict(company.settings or {})
+
+    if request.method == 'POST':
+        settings['mfa_enforced'] = bool(request.form.get('mfa_enforced'))
+        company.settings = settings
+        db.session.commit()
+        if settings['mfa_enforced']:
+            flash('Verificación en dos pasos obligatoria activada. A partir del próximo inicio de sesión, todos los usuarios deberán completar el código por correo.', 'success')
+        else:
+            flash('Verificación en dos pasos obligatoria desactivada. Cada usuario decide si activarla.', 'success')
+        return redirect(url_for('admin.security'))
+
+    total_users = User.query.filter_by(company_id=company.id, is_active=True).count()
+    users_with_mfa = User.query.filter_by(company_id=company.id, is_active=True, mfa_enabled=True).count()
+    return render_template(
+        'admin/security.html',
+        company=company,
+        mfa_enforced=bool(settings.get('mfa_enforced')),
+        total_users=total_users,
+        users_with_mfa=users_with_mfa,
+    )
