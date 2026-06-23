@@ -99,6 +99,20 @@
                 </div>
             </div>
         </a>
+
+        <a href="{{ url_for('admin.ocr_settings') }}"
+            class="group block p-8 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary/20 transition-all duration-300">
+            <div class="flex items-center gap-5">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-violet-50 text-violet-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="i-heroicons-cpu-chip text-2xl"></span>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 leading-tight">OCR / IA</h3>
+                    <p class="text-sm text-gray-500 mt-1">OpenRouter o servidor local (Ollama, vLLM...).</p>
+                </div>
+            </div>
+        </a>
     </div>
 
     <!-- Quick Stats for Admin -->

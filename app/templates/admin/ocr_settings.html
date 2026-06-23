@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}OCR / IA - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8" x-data="ocrForm({
+        enabled: {{ 'true' if ocr_settings.enabled else 'false' }},
+        provider: '{{ ocr_settings.provider }}',
+        source: '{{ ocr_settings.source }}',
+        presets: {{ presets | tojson }},
+        default_cloud_prompt: {{ default_cloud_prompt | tojson }},
+        default_local_prompt: {{ default_local_prompt | tojson }},
+        cloud_prompt_saved: {{ (ocr_settings.openrouter_prompt or '') | tojson }},
+        local_prompt_saved: {{ (ocr_settings.local_prompt or '') | tojson }}
+    })">
+    <div class="mb-6">
+        <a href="{{ url_for('admin.index') }}" class="text-sm text-gray-500 hover:text-primary">← Volver al Panel</a>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">Procesamiento de Imágenes (OCR)</h1>
+        <p class="text-gray-500 mt-1">Configura el motor de IA que extrae los datos de las boletas para {{ company.name }}.</p>
+    </div>
+
+    {% if ocr_settings.source == 'env' %}
+    <div class="mb-4 p-4 rounded-xl border border-warning/40 bg-warning-light/60 text-sm text-warning-dark">
+        <strong>Configuración heredada del servidor.</strong>
+        Actualmente se usa <code class="bg-white px-1 rounded">OPENROUTER_API_KEY</code> del archivo <code class="bg-white px-1 rounded">.env</code>.
+        Para usar esta empresa de forma independiente, activa OCR y define un proveedor abajo.
+    </div>
+    {% elif ocr_settings.source == 'none' %}
+    <div class="mb-4 p-4 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-600">
+        OCR no configurado. Activa la opción para elegir proveedor.
+    </div>
+    {% endif %}
+
+    <div class="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <div class="card">
+            <form method="POST" class="space-y-6">
+                <!-- Estado general -->
+                <div class="flex items-start justify-between gap-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                    <div>
+                        <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Estado general</h2>
+                        <p class="text-sm text-gray-500 mt-1">Activa o desactiva el reconocimiento automático de boletas.</p>
+                    </div>
+                    <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700 whitespace-nowrap">
+                        <input type="checkbox" name="ocr_enabled" value="1" x-model="enabledRaw">
+                        <span x-text="enabled ? 'Habilitado' : 'Deshabilitado'"></span>
+                    </label>
+                </div>
+
+                <!-- Selector de proveedor -->
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
+                        <select name="ocr_provider" class="input" x-model="provider">
+                            <option value="openrouter">OpenRouter (cloud)</option>
+                            <option value="local">Local (OpenAI-compatible)</option>
+                        </select>
+                    </div>
+                    <div class="text-xs text-gray-500 self-end pb-2 leading-relaxed">
+                        <template x-if="provider === 'local'">
+                            <div>Servidores compatibles: <strong>Ollama, LMStudio, LiteLLM, vLLM, llama.cpp</strong>.</div>
+                        </template>
+                        <template x-if="provider === 'openrouter'">
+                            <div>Cloud: accede a modelos como <strong>gpt-4o-mini</strong> vía OpenRouter.</div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- ============ OpenRouter ============ -->
+                <div x-show="provider === 'openrouter'" x-cloak class="space-y-4 pt-4 border-t border-gray-100">
+                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">OpenRouter</h3>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Modelo principal</label>
+                            <input type="text" name="openrouter_model" class="input" value="{{ ocr_settings.openrouter_model }}" placeholder="openai/gpt-4o-mini">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Modelo fallback (opcional)</label>
+                            <input type="text" name="openrouter_model_fallback" class="input" value="{{ ocr_settings.openrouter_model_fallback }}" placeholder="google/gemini-2.0-flash-exp">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key OpenRouter</label>
+                        <input type="password" name="openrouter_api_key" class="input" placeholder="{% if ocr_settings.openrouter_has_api_key %}Configurada: {{ ocr_settings.openrouter_masked_api_key }}{% else %}sk-or-...{% endif %}">
+                        {% if ocr_settings.openrouter_has_api_key %}
+                        <label class="inline-flex items-center gap-2 text-sm text-gray-600 mt-2">
+                            <input type="checkbox" name="remove_openrouter_api_key" value="1">
+                            Eliminar API key guardada
+                        </label>
+                        {% endif %}
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-sm font-medium text-gray-700">Prompt (cloud)</label>
+                            <button type="button" @click="cloud_prompt = default_cloud_prompt"
+                                class="text-xs text-primary hover:underline">Restaurar recomendado</button>
+                        </div>
+                        <textarea name="openrouter_prompt" rows="8" class="input font-mono text-xs" x-model="cloud_prompt" placeholder="Prompt para el modelo cloud..."></textarea>
+                        <p class="text-[11px] text-gray-400 mt-1">
+                            Por defecto incluye instrucciones para extraer <code>amount, merchant, date, time, category</code>.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- ============ Local ============ -->
+                <div x-show="provider === 'local'" x-cloak class="space-y-4 pt-4 border-t border-gray-100">
+                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Local (OpenAI-compatible)</h3>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">URL del servidor (base_url)</label>
+                        <div class="flex gap-2">
+                            <select class="input sm:max-w-[200px]" x-model="presetChoice" @change="local_base_url = presets[presetChoice] || local_base_url">
+                                <option value="">— Preset —</option>
+                                <template x-for="(url, name) in presets" :key="name">
+                                    <option :value="name" x-text="name"></option>
+                                </template>
+                            </select>
+                            <input type="text" name="local_base_url" class="input flex-1" x-model="local_base_url" value="{{ ocr_settings.local_base_url }}" placeholder="http://localhost:11434/v1">
+                        </div>
+                        <p class="text-[11px] text-gray-400 mt-1">
+                            Importante: debe terminar en <code>/v1</code>. Si el servidor está en otro host (no localhost), usa la IP o dominio reach-able desde este servidor.
+                        </p>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Modelo principal</label>
+                            <input type="text" name="local_model" class="input" value="{{ ocr_settings.local_model }}" placeholder="llama3.2-vision">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Modelo fallback (opcional)</label>
+                            <input type="text" name="local_model_fallback" class="input" value="{{ ocr_settings.local_model_fallback }}" placeholder="minicpm-v">
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Timeout (segundos)</label>
+                            <input type="number" name="local_timeout" min="5" max="600" class="input" value="{{ ocr_settings.local_timeout }}" placeholder="60">
+                            <p class="text-[11px] text-gray-400 mt-1">Local en CPU puede tardar 30-90s por boleta.</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API Key (opcional)</label>
+                            <input type="password" name="local_api_key" class="input" placeholder="{% if ocr_settings.local_has_api_key %}Configurada: {{ ocr_settings.local_masked_api_key }}{% else %}sk-no-key-required (la mayoría no requiere){% endif %}">
+                            {% if ocr_settings.local_has_api_key %}
+                            <label class="inline-flex items-center gap-2 text-sm text-gray-600 mt-2">
+                                <input type="checkbox" name="remove_local_api_key" value="1">
+                                Eliminar API key guardada
+                            </label>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-sm font-medium text-gray-700">Prompt (local)</label>
+                            <button type="button" @click="local_prompt = default_local_prompt"
+                                class="text-xs text-primary hover:underline">Restaurar recomendado</button>
+                        </div>
+                        <textarea name="local_prompt" rows="10" class="input font-mono text-xs" x-model="local_prompt" placeholder="Prompt para el modelo local..."></textarea>
+                        <p class="text-[11px] text-gray-400 mt-1">
+                            El prompt default local es más explícito para modelos pequeños con JSON estructurado.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-gray-200 flex justify-end gap-3">
+                    <a href="{{ url_for('admin.index') }}" class="btn-outline">Cancelar</a>
+                    <button type="submit" class="btn-primary">Guardar Configuración</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="space-y-6">
+            <div class="card">
+                <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Probar conexión</h2>
+                <p class="text-sm text-gray-500 mt-2">Envía una imagen sintética mínima al modelo actual y muestra la respuesta.</p>
+                <form method="POST" action="{{ url_for('admin.ocr_settings_test') }}" class="mt-4">
+                    <button type="submit" class="btn-primary w-full">Probar ahora</button>
+                </form>
+                <p class="text-[11px] text-gray-400 mt-3 leading-relaxed">
+                    La imagen de prueba es un recibo generado con monto <code>$1.990</code>; el objetivo es validar que el servidor responde y que el formato vision funciona. No es una medida de calidad del modelo.
+                </p>
+            </div>
+
+            <div class="card">
+                <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Notas</h2>
+                <ul class="mt-3 space-y-2 text-sm text-gray-600 list-disc pl-5">
+                    <li>OpenRouter usa tu API key de siempre (la misma que ya está en <code>.env</code>).</li>
+                    <li>Si desactivas OCR y no hay config en <code>.env</code>, la carga manual sigue funcionando.</li>
+                    <li>Modelos locales pequeños pueden equivocarse con JSON; revisa los resultados antes de aprobar.</li>
+                    {% if not can_encrypt %}
+                    <li class="text-warning-dark"><strong>SETTINGS_ENCRYPTION_KEY no configurado:</strong> no se podrán guardar API keys hasta definirlo en el servidor.</li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function ocrForm(initial) {
+    return {
+        enabled: initial.enabled,
+        provider: initial.provider,
+        source: initial.source,
+        presets: initial.presets,
+        default_cloud_prompt: initial.default_cloud_prompt,
+        default_local_prompt: initial.default_local_prompt,
+        cloud_prompt: initial.cloud_prompt_saved || initial.default_cloud_prompt,
+        local_prompt: initial.local_prompt_saved || initial.default_local_prompt,
+        local_base_url: '',
+        presetChoice: '',
+        get enabledRaw() { return this.enabled ? true : undefined; },
+        set enabledRaw(v) { this.enabled = !!v; }
+    };
+}
+</script>
+{% endblock %}

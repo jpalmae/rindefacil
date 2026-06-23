@@ -76,22 +76,58 @@ def _render_pdf_first_page_to_png(pdf_path):
                 pass
 
 
-def extract_expense_data(image_path):
+def _run_inference(client, model, prompt, base64_image, mime_type, timeout):
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{mime_type};base64,{base64_image}"},
+                    },
+                ],
+            }
+        ],
+        temperature=0.1,
+        timeout=timeout,
+    )
+    return response.choices[0].message.content
+
+
+def extract_expense_data(image_path, config_override=None):
     """
-    Lee una imagen de recibo local y usa IA a través de OpenRouter 
-    para extraer Fecha, Monto, Comercio y Categoría.
+    Extrae datos de un recibo usando IA (OpenRouter o servidor local OpenAI-compatible).
+
+    - config_override: si se pasa, usa esa config (dict con base_url, api_key,
+      model, model_fallback, timeout, prompt). Si no, resuelve desde la empresa
+      del usuario actual o, en último término, desde variables de entorno.
     """
-    api_key = os.environ.get('OPENROUTER_API_KEY')
-    model_name = os.environ.get('OPENROUTER_MODEL_OCR', 'openai/gpt-4o-mini')
-    
-    if not api_key:
-        current_app.logger.warning("No OPENROUTER_API_KEY en variables de entorno. OCR skip.")
+    from app.services.ocr_settings_service import get_company_ocr_config
+
+    if config_override is not None:
+        config = config_override
+    else:
+        config = get_company_ocr_config()
+
+    if not config or not config.get('enabled'):
+        current_app.logger.info('OCR deshabilitado o sin configurar. Skip.')
         return None
 
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=api_key,
-    )
+    base_url = config.get('base_url')
+    api_key = config.get('api_key') or 'sk-no-key-required'
+    timeout = int(config.get('timeout') or 60)
+    prompt = config.get('prompt')
+    primary_model = config.get('model')
+    fallback_model = config.get('model_fallback')
+
+    if not base_url or not primary_model:
+        current_app.logger.warning('OCR config incompleta (falta base_url o modelo). Skip.')
+        return None
+
+    client = OpenAI(base_url=base_url, api_key=api_key)
 
     temp_image_path = None
     try:
@@ -102,54 +138,31 @@ def extract_expense_data(image_path):
                 return None
             source_path = temp_image_path
 
-        # Codificar imagen en base64
         with open(source_path, "rb") as image_file:
             base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-            
+
         file_ext = os.path.splitext(source_path)[1].lower()
-        mime_type = "image/jpeg"
-        if file_ext == '.png': mime_type = "image/png"
+        mime_type = "image/png" if file_ext == '.png' else "image/jpeg"
 
-        prompt = """
-        Eres un asistente de contabilidad experto. Extrae la información de este recibo comercial.
-        Devuelve ÚNICAMENTE un objeto JSON válido con las siguientes claves:
-        - "amount": Número con el total pagado. Si el comprobante está en CLP, devuelve el monto sin símbolos, sin puntos y sin comas de miles. Ej: 12990. Usa punto SOLO si hay decimales reales en monedas extranjeras. Ej: 2500 o 2500.75
-        - "merchant": Nombre comercial del proveedor o comercio (si no hay, devuelve null).
-        - "date": Fecha del gasto en formato DD/MM/YYYY (si no hay, devuelve null).
-        - "time": Hora del comprobante en formato HH:MM (24h). Si no está visible, devuelve null.
-        - "category": Clasifica el gasto en una de las siguientes opciones: "Viajes", "Alimentación", "Hospedaje", "Suministros", "Gasto Administrativo", u "Otros".
-        """
+        models_to_try = [m for m in [primary_model, fallback_model] if m]
+        last_error = None
+        for model in models_to_try:
+            try:
+                content = _run_inference(client, model, prompt, base64_image, mime_type, timeout)
+                parsed = _extract_json_payload(content)
+                if parsed is not None:
+                    return parsed
+                last_error = 'Respuesta sin JSON parseable'
+                current_app.logger.warning("OCR model %s devolvió respuesta sin JSON.", model)
+            except Exception as exc:
+                last_error = str(exc)
+                current_app.logger.warning("OCR model %s falló: %s", model, exc)
+                continue
 
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text", 
-                            "text": prompt
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ],
-            temperature=0.1
-        )
-        
-        result_content = response.choices[0].message.content
-        parsed = _extract_json_payload(result_content)
-        if not parsed:
-            current_app.logger.warning("OCR response sin JSON parseable.")
-            return None
+        if last_error:
+            current_app.logger.error("OCR agotó modelos disponibles. Último error: %s", last_error)
+        return None
 
-        return parsed
-        
     except Exception as e:
         current_app.logger.error(f"Error en OCR Service: {e}")
         return None

@@ -11,6 +11,17 @@ from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, A
 from werkzeug.utils import secure_filename
 from app.services.email_service import get_company_email_settings_view, send_test_email
 from app.services.secrets_service import can_encrypt_settings, encrypt_setting
+from app.services.ocr_settings_service import (
+    get_company_ocr_config_view,
+    test_ocr_connection,
+    local_provider_presets,
+    DEFAULT_CLOUD_PROMPT,
+    DEFAULT_LOCAL_PROMPT,
+    OCR_DEFAULT_CLOUD_MODEL,
+    OCR_DEFAULT_LOCAL_BASE_URL,
+    OCR_DEFAULT_LOCAL_MODEL,
+    OCR_DEFAULT_TIMEOUT_SECONDS,
+)
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -531,3 +542,88 @@ def security():
         total_users=total_users,
         users_with_mfa=users_with_mfa,
     )
+
+
+@admin_bp.route('/ocr-settings', methods=['GET', 'POST'])
+def ocr_settings():
+    company = current_user.company
+    settings = dict(company.settings or {})
+
+    if request.method == 'POST':
+        enabled = bool(request.form.get('ocr_enabled'))
+        provider = (request.form.get('ocr_provider') or 'openrouter').strip().lower()
+        if provider not in ('openrouter', 'local'):
+            provider = 'openrouter'
+
+        settings['ocr_enabled'] = enabled
+        settings['ocr_provider'] = provider
+
+        # OpenRouter
+        settings['ocr_openrouter_model'] = (request.form.get('openrouter_model') or '').strip() or OCR_DEFAULT_CLOUD_MODEL
+        settings['ocr_openrouter_model_fallback'] = (request.form.get('openrouter_model_fallback') or '').strip()
+        settings['ocr_openrouter_prompt'] = (request.form.get('openrouter_prompt') or '').strip() or DEFAULT_CLOUD_PROMPT
+
+        openrouter_api_key = (request.form.get('openrouter_api_key') or '').strip()
+        if openrouter_api_key:
+            if not can_encrypt_settings():
+                flash('Falta SETTINGS_ENCRYPTION_KEY en el servidor para guardar la API key.', 'danger')
+                return redirect(url_for('admin.ocr_settings'))
+            settings['ocr_openrouter_api_key'] = encrypt_setting(openrouter_api_key)
+        elif request.form.get('remove_openrouter_api_key') == '1':
+            settings.pop('ocr_openrouter_api_key', None)
+
+        # Local
+        settings['ocr_local_base_url'] = (request.form.get('local_base_url') or '').strip() or OCR_DEFAULT_LOCAL_BASE_URL
+        settings['ocr_local_model'] = (request.form.get('local_model') or '').strip() or OCR_DEFAULT_LOCAL_MODEL
+        settings['ocr_local_model_fallback'] = (request.form.get('local_model_fallback') or '').strip()
+        try:
+            timeout_value = int(request.form.get('local_timeout') or OCR_DEFAULT_TIMEOUT_SECONDS)
+        except (TypeError, ValueError):
+            timeout_value = OCR_DEFAULT_TIMEOUT_SECONDS
+        settings['ocr_local_timeout'] = max(5, min(timeout_value, 600))
+        settings['ocr_local_prompt'] = (request.form.get('local_prompt') or '').strip() or DEFAULT_LOCAL_PROMPT
+
+        local_api_key = (request.form.get('local_api_key') or '').strip()
+        if local_api_key:
+            if not can_encrypt_settings():
+                flash('Falta SETTINGS_ENCRYPTION_KEY en el servidor para guardar la API key.', 'danger')
+                return redirect(url_for('admin.ocr_settings'))
+            settings['ocr_local_api_key'] = encrypt_setting(local_api_key)
+        elif request.form.get('remove_local_api_key') == '1':
+            settings.pop('ocr_local_api_key', None)
+
+        if enabled:
+            if provider == 'openrouter' and not settings.get('ocr_openrouter_api_key'):
+                flash('Para OpenRouter necesitas ingresar la API key.', 'danger')
+                return redirect(url_for('admin.ocr_settings'))
+            if provider == 'local' and not settings.get('ocr_local_base_url'):
+                flash('Para inferencia local necesitas indicar la URL del servidor.', 'danger')
+                return redirect(url_for('admin.ocr_settings'))
+
+        company.settings = settings
+        db.session.commit()
+        flash('Configuración de OCR actualizada.', 'success')
+        return redirect(url_for('admin.ocr_settings'))
+
+    return render_template(
+        'admin/ocr_settings.html',
+        company=company,
+        ocr_settings=get_company_ocr_config_view(company),
+        presets=local_provider_presets(),
+        default_cloud_prompt=DEFAULT_CLOUD_PROMPT,
+        default_local_prompt=DEFAULT_LOCAL_PROMPT,
+        can_encrypt=can_encrypt_settings(),
+    )
+
+
+@admin_bp.route('/ocr-settings/test', methods=['POST'])
+def ocr_settings_test():
+    company = current_user.company
+    ok, message, data = test_ocr_connection(company)
+    if ok:
+        flash(f'Conexión exitosa. {message}', 'success')
+        if data:
+            flash(f'Respuesta del modelo: {data}', 'info')
+    else:
+        flash(f'No se pudo conectar: {message}', 'danger')
+    return redirect(url_for('admin.ocr_settings'))
