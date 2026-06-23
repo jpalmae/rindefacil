@@ -81,7 +81,7 @@
                     </tr>
                     {% endif %}
                     {% for u in users %}
-                    <tr class="hover:bg-gray-50/50 transition-colors group">
+                    <tr class="hover:bg-gray-50/50 transition-colors group {% if not u.is_active %}opacity-60{% endif %}">
                         <td class="px-6 py-4 whitespace-nowrap">
                             <div class="flex items-center gap-3">
                                 <div
@@ -90,7 +90,9 @@
                                 </div>
                                 <div>
                                     <div class="text-sm font-bold text-gray-900">{{ u.full_name }}</div>
-                                    <div class="text-xs text-gray-500 font-medium">{{ u.email }}</div>
+                                    <div class="text-xs text-gray-500 font-medium">
+                                        {% if u.is_active %}{{ u.email }}{% else %}<span class="italic">desactivado</span>{% endif %}
+                                    </div>
                                 </div>
                             </div>
                         </td>
@@ -126,10 +128,17 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
+                            {% if u.is_active %}
                             <span
                                 class="flex items-center gap-1.5 text-[10px] font-bold text-success uppercase tracking-widest">
                                 <span class="w-2 h-2 rounded-full bg-success"></span> Activo
                             </span>
+                            {% else %}
+                            <span
+                                class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                <span class="w-2 h-2 rounded-full bg-gray-300"></span> Inactivo
+                            </span>
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-right">
                             <div class="flex justify-end gap-2">
@@ -140,16 +149,29 @@
                                     Editar
                                 </a>
                                 {% if u.id != current_user.id %}
-                                <form action="{{ url_for('admin.user_delete', user_id=u.id) }}" method="POST"
-                                    onsubmit="return confirm('¿Seguro que quieres eliminar este usuario?');"
-                                    class="inline">
-                                    <button type="submit"
-                                        class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger border border-danger/30 hover:bg-danger/10 transition-colors"
-                                        title="Eliminar usuario">
-                                        <span class="i-heroicons-trash text-sm"></span>
-                                        Eliminar
-                                    </button>
-                                </form>
+                                    {% if u.is_active %}
+                                    <form action="{{ url_for('admin.user_delete', user_id=u.id) }}" method="POST"
+                                        onsubmit="return confirm('Se desactivará el usuario y se liberará su correo. Sus rendiciones y auditoría se conservan. ¿Continuar?');"
+                                        class="inline">
+                                        <button type="submit"
+                                            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-danger border border-danger/30 hover:bg-danger/10 transition-colors"
+                                            title="Desactivar usuario">
+                                            <span class="i-heroicons-trash text-sm"></span>
+                                            Desactivar
+                                        </button>
+                                    </form>
+                                    {% else %}
+                                    <form action="{{ url_for('admin.user_activate', user_id=u.id) }}" method="POST"
+                                        onsubmit="return confirm('Reactivar este usuario? Deberás asignarle una nueva contraseña.');"
+                                        class="inline">
+                                        <button type="submit"
+                                            class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-success border border-success/30 hover:bg-success/10 transition-colors"
+                                            title="Reactivar usuario">
+                                            <span class="i-heroicons-arrow-path text-sm"></span>
+                                            Reactivar
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </td>

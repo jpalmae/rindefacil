@@ -298,14 +298,65 @@ def flow_steps(flow_id):
 @admin_bp.route('/users/<uuid:user_id>/delete', methods=['POST'])
 def user_delete(user_id):
     if user_id == current_user.id:
-        flash('No puedes eliminarte a ti mismo.', 'danger')
+        flash('No puedes desactivarte a ti mismo.', 'danger')
         return redirect(url_for('admin.users'))
-    
+
     user = User.query.get_or_404(user_id)
-    db.session.delete(user)
+    if not user.is_active:
+        flash('Este usuario ya estaba desactivado.', 'info')
+        return redirect(url_for('admin.users'))
+
+    # Soft delete: preserva la fila para integridad de gastos, rendiciones,
+    # decisiones de aprobación y auditoría. Solo se revoca el acceso y se
+    # libera el email anonimizándolo (para permitir reutilizarlo si se crea
+    # un nuevo usuario con la misma dirección).
+    import uuid as _uuid
+    user.is_active = False
+    user.must_change_password = True
+    user.mfa_enabled = False
+    user.password_hash = '!'  # invalida cualquier password previo
+    original_email = user.email
+    user.email = f"inactive_{_uuid.uuid4().hex[:16]}@inactive.local"
+
+    # Revocar API keys activas y sesiones MFA / reset tokens pendientes
+    from app.models.api_key import UserApiKey
+    from app.models.mfa_code import MfaCode
+    from app.models.password_reset_token import PasswordResetToken
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+
+    for key in UserApiKey.query.filter_by(user_id=user.id, revoked_at=None).all():
+        key.revoked_at = now
+    for code in MfaCode.query.filter_by(user_id=user.id, consumed_at=None).all():
+        code.consumed_at = now
+    for token in PasswordResetToken.query.filter_by(user_id=user.id, used_at=None).all():
+        token.used_at = now
+
+    # Si el usuario es manager de otros, avisamos al admin pero no tocamos
+    # la asignación (el flujo de aprobación ya omite managers inexistentes).
+    subordinates_count = user.subordinates.count() if hasattr(user, 'subordinates') else 0
+
     db.session.commit()
-    flash('Usuario eliminado.', 'warning')
+
+    message = f'Usuario "{user.full_name}" desactivado. El correo {original_email} quedó libre.'
+    if subordinates_count:
+        message += f' Ten en cuenta que todavía es manager de {subordinates_count} usuario(s); revisa sus asignaciones si corresponde.'
+    flash(message, 'warning')
     return redirect(url_for('admin.users'))
+
+
+@admin_bp.route('/users/<uuid:user_id>/activate', methods=['POST'])
+def user_activate(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.is_active:
+        flash('Este usuario ya estaba activo.', 'info')
+        return redirect(url_for('admin.users'))
+
+    user.is_active = True
+    user.must_change_password = True  # obliga a definir nueva contraseña al reactivar
+    db.session.commit()
+    flash(f'Usuario "{user.full_name}" reactivado. Define una nueva contraseña desde la edición del usuario.', 'success')
+    return redirect(url_for('admin.user_edit', user_id=user.id))
 
 @admin_bp.route('/cost-centers/<uuid:id>/delete', methods=['POST'])
 def cost_center_delete(id):
