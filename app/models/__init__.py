@@ -17,6 +17,7 @@ from app.models.mfa_code import (
     MFA_CODE_PURPOSE_LOGIN,
     MFA_CODE_PURPOSE_SETUP,
 )
+from app.models.oidc_provider import OidcProvider
 
 # Para facilitar la exposición
 __all__ = [
@@ -46,4 +47,5 @@ __all__ = [
     'MFA_CODE_MAX_ATTEMPTS',
     'MFA_CODE_PURPOSE_LOGIN',
     'MFA_CODE_PURPOSE_SETUP',
+    'OidcProvider',
 ]

@@ -28,6 +28,8 @@ class User(UserMixin, db.Model):
     can_mark_reimbursements_paid = db.Column(db.Boolean, nullable=False, default=False)
     must_change_password = db.Column(db.Boolean, nullable=False, default=False)
     mfa_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    oidc_subject = db.Column(db.String(255), nullable=True, index=True)
+    auth_source = db.Column(db.String(32), nullable=False, default='local')
     avatar_url = db.Column(db.String(500))
     signature_url = db.Column(db.String(500))
     is_active = db.Column(db.Boolean, default=True)

@@ -22,6 +22,25 @@ from app.services.ocr_settings_service import (
     OCR_DEFAULT_LOCAL_MODEL,
     OCR_DEFAULT_TIMEOUT_SECONDS,
 )
+from app.models.oidc_provider import OidcProvider
+from app.services import oidc_service
+
+
+# Presets de OIDC para el admin
+OIDC_PRESETS = {
+    'google': {
+        'name': 'Google Workspace',
+        'discovery_url': 'https://accounts.google.com',
+        'scopes': 'openid profile email',
+        'icon_slug': 'google',
+    },
+    'microsoft': {
+        'name': 'Microsoft Entra ID',
+        'discovery_url': 'https://login.microsoftonline.com/common/v2.0',
+        'scopes': 'openid profile email',
+        'icon_slug': 'microsoft',
+    },
+}
 
 admin_bp = Blueprint('admin', __name__)
 
@@ -678,3 +697,113 @@ def ocr_settings_test():
     else:
         flash(f'No se pudo conectar: {message}', 'danger')
     return redirect(url_for('admin.ocr_settings'))
+
+
+# ---------------------------------------------------------------------------
+# Single Sign-On (OIDC providers) — Google Workspace, Microsoft Entra, etc.
+# ---------------------------------------------------------------------------
+@admin_bp.route('/oidc-providers')
+def oidc_providers():
+    providers = OidcProvider.query.filter_by(company_id=current_user.company_id).order_by(OidcProvider.name.asc()).all()
+    return render_template(
+        'admin/oidc_providers.html',
+        providers=providers,
+        presets=OIDC_PRESETS,
+        can_encrypt=can_encrypt_settings(),
+        redirect_uri_example=url_for('auth.oidc_callback', _external=True),
+    )
+
+
+@admin_bp.route('/oidc-providers/new', methods=['GET', 'POST'])
+def oidc_provider_new():
+    if request.method == 'POST':
+        if not can_encrypt_settings():
+            flash('Falta SETTINGS_ENCRYPTION_KEY en el servidor para guardar el client secret.', 'danger')
+            return redirect(url_for('admin.oidc_provider_new'))
+
+        slug = (request.form.get('slug') or '').strip().lower()
+        name = (request.form.get('name') or '').strip()
+        client_id = (request.form.get('client_id') or '').strip()
+        client_secret = (request.form.get('client_secret') or '').strip()
+        discovery_url = (request.form.get('discovery_url') or '').strip()
+        scopes = (request.form.get('scopes') or '').strip() or 'openid profile email'
+
+        if not slug or not name or not client_id or not client_secret or not discovery_url:
+            flash('Completa slug, nombre, client_id, client_secret y discovery URL.', 'danger')
+            return redirect(url_for('admin.oidc_provider_new'))
+        if OidcProvider.query.filter_by(company_id=current_user.company_id, slug=slug).first():
+            flash(f'Ya existe un provider con slug "{slug}".', 'warning')
+            return redirect(url_for('admin.oidc_provider_new'))
+
+        provider = OidcProvider(
+            company_id=current_user.company_id,
+            slug=slug,
+            name=name,
+            client_id=client_id,
+            client_secret=encrypt_setting(client_secret),
+            discovery_url=discovery_url,
+            scopes=scopes,
+            enabled=bool(request.form.get('enabled')),
+            auto_provision=bool(request.form.get('auto_provision')),
+            allowed_domains=(request.form.get('allowed_domains') or '').strip() or None,
+            icon_slug=(request.form.get('icon_slug') or '').strip() or None,
+        )
+        db.session.add(provider)
+        db.session.commit()
+        flash(f'Provider "{name}" creado.', 'success')
+        return redirect(url_for('admin.oidc_providers'))
+
+    preset = request.args.get('preset')
+    return render_template(
+        'admin/oidc_provider_form.html',
+        provider=None,
+        preset=OIDC_PRESETS.get(preset, {}),
+        preset_key=preset or '',
+        can_encrypt=can_encrypt_settings(),
+        redirect_uri_example=url_for('auth.oidc_callback', _external=True),
+    )
+
+
+@admin_bp.route('/oidc-providers/<uuid:provider_id>/edit', methods=['GET', 'POST'])
+def oidc_provider_edit(provider_id):
+    provider = OidcProvider.query.filter_by(id=provider_id, company_id=current_user.company_id).first_or_404()
+
+    if request.method == 'POST':
+        provider.name = (request.form.get('name') or '').strip() or provider.name
+        provider.client_id = (request.form.get('client_id') or '').strip() or provider.client_id
+        provider.discovery_url = (request.form.get('discovery_url') or '').strip() or provider.discovery_url
+        provider.scopes = (request.form.get('scopes') or '').strip() or 'openid profile email'
+        provider.enabled = bool(request.form.get('enabled'))
+        provider.auto_provision = bool(request.form.get('auto_provision'))
+        provider.allowed_domains = (request.form.get('allowed_domains') or '').strip() or None
+        provider.icon_slug = (request.form.get('icon_slug') or '').strip() or None
+
+        new_secret = (request.form.get('client_secret') or '').strip()
+        if new_secret:
+            if not can_encrypt_settings():
+                flash('Falta SETTINGS_ENCRYPTION_KEY para actualizar el client secret.', 'danger')
+                return redirect(url_for('admin.oidc_provider_edit', provider_id=provider.id))
+            provider.client_secret = encrypt_setting(new_secret)
+
+        db.session.commit()
+        flash(f'Provider "{provider.name}" actualizado.', 'success')
+        return redirect(url_for('admin.oidc_providers'))
+
+    return render_template(
+        'admin/oidc_provider_form.html',
+        provider=provider,
+        preset={},
+        preset_key='',
+        can_encrypt=can_encrypt_settings(),
+        redirect_uri_example=url_for('auth.oidc_callback', _external=True),
+    )
+
+
+@admin_bp.route('/oidc-providers/<uuid:provider_id>/delete', methods=['POST'])
+def oidc_provider_delete(provider_id):
+    provider = OidcProvider.query.filter_by(id=provider_id, company_id=current_user.company_id).first_or_404()
+    name = provider.name
+    db.session.delete(provider)
+    db.session.commit()
+    flash(f'Provider "{name}" eliminado.', 'warning')
+    return redirect(url_for('admin.oidc_providers'))

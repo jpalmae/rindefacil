@@ -17,7 +17,9 @@ from app.models.mfa_code import (
     MFA_CODE_PURPOSE_LOGIN,
     MFA_CODE_PURPOSE_SETUP,
 )
+from app.models.oidc_provider import OidcProvider
 from app.services.email_service import send_mfa_code_email, send_password_reset_email
+from app.services import oidc_service
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -95,14 +97,14 @@ def login():
         if user and user.check_password(password):
             if not user.is_active:
                 flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
-                return render_template('auth/login.html')
+                return render_template('auth/login.html', oidc_providers=_public_oidc_providers())
 
             temp_password = _temporary_password_value()
             force_change_on_success = bool(
                 user.must_change_password or (temp_password and password == temp_password)
             )
 
-            if user.is_mfa_required:
+            if user.is_mfa_required and user.auth_source != 'oidc':
                 _invalidate_user_mfa_codes(user, MFA_CODE_PURPOSE_LOGIN)
                 code, raw_code = MfaCode.build_for_user(user, MFA_CODE_PURPOSE_LOGIN)
                 db.session.add(code)
@@ -129,7 +131,7 @@ def login():
 
         flash('Email o contraseña incorrectos.', 'danger')
 
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', oidc_providers=_public_oidc_providers())
 
 
 @auth_bp.route('/mfa-verify', methods=['GET', 'POST'])
@@ -572,3 +574,102 @@ def mfa_disable():
     db.session.commit()
     flash('Verificación en dos pasos desactivada.', 'warning')
     return redirect(url_for('auth.profile'))
+
+
+# ---------------------------------------------------------------------------
+# Single Sign-On (OIDC) — Google Workspace, Microsoft Entra, etc.
+# ---------------------------------------------------------------------------
+def _public_oidc_providers():
+    """Lista de providers habilitados de TODAS las empresas (para login global)."""
+    return OidcProvider.query.filter_by(enabled=True).order_by(OidcProvider.name.asc()).all()
+
+
+@auth_bp.route('/oidc/login/<uuid:provider_id>', methods=['GET'])
+@limiter.limit('10/minute;30/hour')
+def oidc_login(provider_id):
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+    provider = OidcProvider.query.get_or_404(provider_id)
+    if not provider.enabled:
+        flash('Este proveedor de inicio de sesión está deshabilitado.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    redirect_uri = url_for('auth.oidc_callback', _external=True)
+    state = oidc_service.create_state_token(provider.slug, provider.company_id)
+    try:
+        auth_url = oidc_service.build_authorization_url(provider, redirect_uri, state)
+    except Exception as exc:
+        current_app.logger.error('OIDC: no se pudo construir auth URL para %s: %s', provider.slug, exc)
+        flash('No se pudo iniciar sesión con ' + provider.name + '. Verifica la configuración.', 'danger')
+        return redirect(url_for('auth.login'))
+    return redirect(auth_url)
+
+
+@auth_bp.route('/oidc/callback', methods=['GET'])
+@limiter.limit('20/minute;60/hour')
+def oidc_callback():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+
+    error = request.args.get('error')
+    error_description = request.args.get('error_description')
+    code = request.args.get('code')
+    state = request.args.get('state')
+
+    if error:
+        flash('Inicio de sesión cancelado: ' + (error_description or error), 'warning')
+        return redirect(url_for('auth.login'))
+    if not code or not state:
+        flash('Parámetros de inicio de sesión incompletos.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    state_payload = oidc_service.verify_state_token(state)
+    if not state_payload:
+        flash('Sesión expirada o inválida. Intenta de nuevo.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    provider_slug = state_payload.get('provider')
+    company_id = state_payload.get('company_id')
+
+    provider = OidcProvider.query.filter_by(
+        slug=provider_slug, company_id=company_id, enabled=True
+    ).first()
+    if not provider:
+        flash('Proveedor de inicio de sesión no encontrado.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    from app.models.company import Company
+    company = Company.query.get(company_id)
+    if not company:
+        flash('Empresa no encontrada.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    redirect_uri = url_for('auth.oidc_callback', _external=True)
+
+    try:
+        claims = oidc_service.exchange_code_and_get_claims(provider, code, redirect_uri)
+    except Exception as exc:
+        current_app.logger.error('OIDC: fallo al canjear code para %s: %s', provider.slug, exc)
+        flash('No se pudo completar la autenticación con ' + provider.name + '.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    try:
+        user = oidc_service.resolve_or_create_user(company, claims, provider)
+    except PermissionError as exc:
+        flash(str(exc), 'danger')
+        return redirect(url_for('auth.login'))
+    except Exception as exc:
+        current_app.logger.error('OIDC: fallo al resolver usuario para %s: %s', provider.slug, exc)
+        flash('No se pudo procesar tu usuario. Contacta al administrador.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    if not user.is_active:
+        flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    # Para usuarios OIDC, no aplicamos must_change_password ni MFA (el IdP gestiona 2FA).
+    login_user(user, remember=False)
+    user.last_login = datetime.now(timezone.utc)
+    db.session.commit()
+    flash('Sesión iniciada con ' + provider.name + '.', 'success')
+    return redirect(url_for('dashboard.index'))

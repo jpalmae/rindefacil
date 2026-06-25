@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}{% if provider %}Editar Provider{% else %}Nuevo Provider{% endif %} - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-6">
+        <a href="{{ url_for('admin.oidc_providers') }}" class="text-sm text-gray-500 hover:text-primary">← Volver a Providers</a>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">{% if provider %}Editar Provider{% else %}Nuevo Provider{% endif %}</h1>
+        {% if preset_key %}
+        <p class="text-gray-500 mt-1">Preset: <strong>{{ preset_key|capitalize }}</strong> — los campos se completaron automáticamente, ajústalos a tu cuenta.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <form method="POST" class="space-y-5">
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Slug</label>
+                    <input type="text" name="slug" class="input" value="{{ provider.slug if provider else preset.name.lower().replace(' ', '-') if preset else '' }}"
+                        placeholder="google" required {% if provider %}readonly{% endif %} pattern="[a-z0-9][a-z0-9_-]*">
+                    <p class="text-[11px] text-gray-400 mt-1">Identificador interno. Solo minúsculas, números, guiones. No editable después de crear.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre visible</label>
+                    <input type="text" name="name" class="input" value="{{ provider.name if provider else preset.name if preset else '' }}"
+                        placeholder="Google Workspace" required>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                <input type="text" name="client_id" class="input" value="{{ provider.client_id if provider else '' }}"
+                    placeholder="xxxxx.apps.googleusercontent.com" required>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Client Secret</label>
+                {% if provider %}
+                <input type="password" name="client_secret" class="input" placeholder="Cifrado. Deja en blanco para mantener el actual.">
+                {% else %}
+                <input type="password" name="client_secret" class="input" placeholder="GOCSPX-..." required>
+                {% endif %}
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Discovery URL</label>
+                <input type="text" name="discovery_url" class="input" value="{{ provider.discovery_url if provider else preset.discovery_url if preset else '' }}"
+                    placeholder="https://accounts.google.com" required>
+                <p class="text-[11px] text-gray-400 mt-1">
+                    Google: <code>https://accounts.google.com</code><br>
+                    Microsoft: <code>https://login.microsoftonline.com/{tenant}/v2.0</code> (reemplaza <code>{tenant}</code> por tu tenant ID o <code>common</code>).
+                </p>
+            </div>
+
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Scopes</label>
+                    <input type="text" name="scopes" class="input" value="{{ provider.scopes if provider else preset.scopes if preset else 'openid profile email' }}">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Icon slug (opcional)</label>
+                    <input type="text" name="icon_slug" class="input" value="{{ provider.icon_slug if provider else preset.icon_slug if preset else '' }}"
+                        placeholder="google, microsoft, o vacío">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Dominios permitidos (opcional)</label>
+                <input type="text" name="allowed_domains" class="input" value="{{ provider.allowed_domains if provider else '' }}"
+                    placeholder="midominio.cl, otro.cl">
+                <p class="text-[11px] text-gray-400 mt-1">Separados por coma. Vacío permite cualquier dominio.</p>
+            </div>
+
+            <div class="flex flex-col gap-3 pt-2">
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" name="enabled" value="1" {% if not provider or provider.enabled %}checked{% endif %}>
+                    Habilitado
+                </label>
+                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <input type="checkbox" name="auto_provision" value="1" {% if provider and provider.auto_provision %}checked{% endif %}>
+                    Auto-provisionar usuarios nuevos (crear cuenta automáticamente en el primer login)
+                </label>
+            </div>
+
+            <div class="pt-4 border-t border-gray-200 flex justify-end gap-3">
+                <a href="{{ url_for('admin.oidc_providers') }}" class="btn-outline">Cancelar</a>
+                <button type="submit" class="btn-primary">{% if provider %}Guardar cambios{% else %}Crear provider{% endif %}</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-6 card">
+        <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">URL de callback</h2>
+        <p class="text-sm text-gray-500 mt-2">Registra esta URL en tu consola OAuth:</p>
+        <code class="block mt-2 p-2 bg-gray-50 rounded-lg border border-gray-200 text-xs font-mono break-all">{{ redirect_uri_example }}</code>
+    </div>
+</div>
+{% endblock %}
