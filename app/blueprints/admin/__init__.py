@@ -708,6 +708,7 @@ def oidc_providers():
     return render_template(
         'admin/oidc_providers.html',
         providers=providers,
+        company=current_user.company,
         presets=OIDC_PRESETS,
         can_encrypt=can_encrypt_settings(),
         redirect_uri_example=url_for('auth.oidc_callback', _external=True),
