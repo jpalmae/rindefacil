@@ -24,9 +24,9 @@ def index():
     total_draft = db.session.query(func.sum(Expense.amount_clp)).filter_by(user_id=current_user.id, status=ExpenseStatus.DRAFT).scalar() or 0
     total_approved = db.session.query(func.sum(Expense.amount_clp)).filter_by(user_id=current_user.id, status=ExpenseStatus.APPROVED).scalar() or 0
     
-    # Analytics Corporativos (para el Admin/Manager)
+    # Analytics Corporativos (solo para Admin)
     analytics_data = {}
-    if current_user.has_role('admin') or current_user.has_role('manager'):
+    if current_user.is_admin:
         # Gastos por Categoría
         cat_stats = db.session.query(Category.name, func.sum(Expense.amount_clp))\
             .join(Expense, Expense.category_id == Category.id)\

@@ -38,7 +38,11 @@ def _can_manage_draft_report(report):
 def _can_view_report(report):
     if report.company_id != current_user.company_id:
         return False
-    if report.user_id == current_user.id or current_user.has_role('admin') or current_user.has_role('manager'):
+    if report.user_id == current_user.id or current_user.is_admin:
+        return True
+    if _can_user_approve_report(report):
+        # Manager/approver del paso actual del flujo puede ver la rendición
+        # que tiene pendiente de aprobar, pero no cualquier otra.
         return True
     return current_user.has_finance_report_access and report.status in FINANCE_VISIBLE_STATUSES
 
@@ -166,7 +170,8 @@ def index():
     report_views = {}
     default_scope = 'mine'
 
-    if current_user.has_role('admin') or current_user.has_role('manager'):
+    if current_user.is_admin:
+        # Admins: todas las rendiciones de la empresa.
         company_reports = base_query.filter_by(company_id=current_user.company_id).order_by(Report.created_at.desc()).all()
         report_views = {
             'pending': [report for report in company_reports if _can_user_approve_report(report)],
@@ -180,6 +185,7 @@ def index():
             ]
         default_scope = 'pending' if report_views['pending'] else 'mine'
     elif current_user.has_finance_report_access:
+        # Perfil Finanzas (no admin): propias + aprobadas/pagadas de la empresa.
         finance_reports = base_query.filter(
             Report.company_id == current_user.company_id,
             or_(
@@ -192,6 +198,22 @@ def index():
             'finance': finance_reports,
         }
         default_scope = 'finance'
+    elif current_user.has_role('manager'):
+        # Manager (no admin, no finanzas): propias + rendiciones donde es
+        # aprobador del paso actual del flujo (por rol, usuario o como jefe
+        # jerárquico del solicitante). NO ve todas las de la empresa.
+        candidates = base_query.filter(
+            Report.company_id == current_user.company_id,
+            or_(
+                Report.user_id == current_user.id,
+                Report.status.in_(REVIEW_STATUSES),
+            ),
+        ).order_by(Report.created_at.desc()).all()
+        report_views = {
+            'mine': [report for report in candidates if report.user_id == current_user.id],
+            'pending': [report for report in candidates if _can_user_approve_report(report)],
+        }
+        default_scope = 'pending' if report_views['pending'] else 'mine'
     else:
         own_reports = base_query.filter_by(user_id=current_user.id).order_by(Report.created_at.desc()).all()
         report_views = {'mine': own_reports}
@@ -554,8 +576,8 @@ def approve(id):
     
     # Check if report is in a flow
     if not report.approval_flow_id:
-        # Fallback to old behavior for legacy or no-flow reports
-        if not current_user.has_role('admin') and not current_user.has_role('manager'):
+        # Fallback para rendiciones legacy sin flujo: solo admin puede actuar.
+        if not current_user.is_admin:
             flash('No tienes permiso.', 'danger')
             return redirect(url_for('reports.show', id=id))
         
@@ -697,7 +719,7 @@ def request_info(id):
         if not _is_user_current_step_approver(report, allow_admin_override=False):
             flash('No eres el aprobador designado para este paso.', 'warning')
             return redirect(url_for('reports.show', id=id))
-    elif not (current_user.is_admin or current_user.has_role('manager')):
+    elif not current_user.is_admin:
         flash('No tienes permiso.', 'danger')
         return redirect(url_for('reports.show', id=id))
 
