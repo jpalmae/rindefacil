@@ -6,7 +6,7 @@ from app.extensions import db
 from app.models.report import Report, ReportSettlementType, ReportStatus
 from app.models.expense import Expense, ExpenseStatus
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
@@ -162,10 +162,54 @@ def _select_approval_flow(company_id, total_amount):
 def index():
     scope = (request.args.get('scope') or '').strip().lower()
     payment_filter = (request.args.get('payment_filter') or 'all').strip().lower()
+
+    # Filtros avanzados (solo admin/finanzas los ve en UI, pero aplicarlos
+    # globalmente no rompe el aislamiento: los branches de manager/employee
+    # ya acotan por user_id, así que cualquier filtro externo no filtra datos
+    # que no deberían ver).
+    date_from = (request.args.get('date_from') or '').strip()
+    date_to = (request.args.get('date_to') or '').strip()
+    user_filter = (request.args.get('user_id') or '').strip()
+    status_filter = (request.args.get('status') or '').strip().lower()
+    settlement_filter = (request.args.get('settlement_type') or '').strip().lower()
+
+    can_use_advanced_filters = current_user.is_admin or current_user.has_finance_report_access
+
     base_query = Report.query.options(
         joinedload(Report.user),
         joinedload(Report.approval_flow).selectinload(ApprovalFlow.steps),
     )
+
+    # Aplicar filtros al base_query (encadenan con los filtros de cada branch).
+    if date_from:
+        try:
+            base_query = base_query.filter(Report.created_at >= datetime.strptime(date_from, '%Y-%m-%d'))
+        except ValueError:
+            date_from = ''
+    if date_to:
+        try:
+            # Fin del día inclusive
+            base_query = base_query.filter(Report.created_at < datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1))
+        except ValueError:
+            date_to = ''
+    if can_use_advanced_filters and user_filter:
+        try:
+            base_query = base_query.filter(Report.user_id == UUID(user_filter))
+        except (ValueError, AttributeError):
+            user_filter = ''
+    if status_filter and status_filter in {'draft', 'submitted', 'in_review', 'under_review', 'needs_info', 'approved', 'rejected', 'paid'}:
+        # Normalizar in_review -> under_review (alias histórico)
+        if status_filter == 'in_review':
+            status_filter = 'under_review'
+        base_query = base_query.filter(Report.status == status_filter)
+    else:
+        status_filter = ''
+    if settlement_filter and settlement_filter in {'employee_reimbursement', 'corporate_card'}:
+        base_query = base_query.filter(Report.settlement_type == settlement_filter)
+    else:
+        settlement_filter = ''
+
+    has_active_filters = bool(date_from or date_to or user_filter or status_filter or settlement_filter)
 
     report_views = {}
     default_scope = 'mine'
@@ -277,6 +321,16 @@ def index():
             ).group_by(Expense.report_id).all()
         }
 
+    # Lista de usuarios para el dropdown de filtros (solo admin/finanzas).
+    company_users = []
+    if can_use_advanced_filters:
+        company_users = (
+            User.query
+            .filter_by(company_id=current_user.company_id, is_active=True)
+            .order_by(User.full_name.asc())
+            .all()
+        )
+
     return render_template(
         'reports/index.html',
         reports=reports,
@@ -286,6 +340,16 @@ def index():
         mine_payment_views=mine_payment_views,
         finance_payment_views=finance_payment_views,
         report_views=report_views,
+        can_use_advanced_filters=can_use_advanced_filters,
+        company_users=company_users,
+        filters={
+            'date_from': date_from,
+            'date_to': date_to,
+            'user_id': user_filter,
+            'status': status_filter,
+            'settlement_type': settlement_filter,
+        },
+        has_active_filters=has_active_filters,
     )
 
 @reports_bp.route('/new', methods=['GET', 'POST'])
