@@ -97,6 +97,13 @@
             class="{{ 'btn-primary' if current_payment_filter == 'all' else 'btn-outline' }}">
             Todas
         </a>
+        <a href="{{ url_for('reports.index', scope='finance', payment_filter='por_pagar') }}"
+            class="{{ 'btn-primary' if current_payment_filter == 'por_pagar' else 'btn-outline' }}">
+            Por pagar
+            {% if finance_payment_views['por_pagar'] %}
+            <span class="ml-2 inline-flex min-w-5 justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-bold {{ 'text-white' if current_payment_filter == 'por_pagar' else 'text-primary' }}">{{ finance_payment_views['por_pagar']|length }}</span>
+            {% endif %}
+        </a>
         <a href="{{ url_for('reports.index', scope='finance', payment_filter='paid') }}"
             class="{{ 'btn-primary' if current_payment_filter == 'paid' else 'btn-outline' }}">
             Pagadas
@@ -258,6 +265,8 @@
                 No tienes rendiciones pagadas.
                 {% elif current_scope == 'mine' and current_payment_filter == 'corporate_card' %}
                 No tienes rendiciones de tarjeta corporativa.
+                {% elif current_scope == 'finance' and current_payment_filter == 'por_pagar' %}
+                No hay rendiciones pendientes de pago.
                 {% elif current_scope == 'finance' and current_payment_filter == 'paid' %}
                 No hay rendiciones pagadas visibles para Finanzas.
                 {% elif current_scope == 'finance' and current_payment_filter == 'corporate_card' %}

@@ -242,6 +242,11 @@ def index():
     finance_reports = report_views.get('finance', [])
     finance_payment_views = {
         'all': finance_reports,
+        'por_pagar': [
+            report for report in finance_reports
+            if report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
+            and report.status == ReportStatus.APPROVED
+        ],
         'paid': [
             report for report in finance_reports
             if report.settlement_type == ReportSettlementType.EMPLOYEE_REIMBURSEMENT
@@ -250,6 +255,7 @@ def index():
         'corporate_card': [
             report for report in finance_reports
             if report.settlement_type == ReportSettlementType.CORPORATE_CARD
+            and report.status in (ReportStatus.APPROVED, ReportStatus.PAID)
         ],
     }
 
