@@ -61,7 +61,7 @@
                         {% else %}
                         <span class="i-heroicons-key text-base"></span>
                         {% endif %}
-                        <span>{{ p.name }}{% if p.company.name %} <span class="text-gray-400 font-normal">· {{ p.company.name }}</span>{% endif %}</span>
+                        <span>{{ p.name }}{% if p.company.domain_label %} <span class="text-gray-400 font-normal">· {{ p.company.domain_label }}</span>{% endif %}</span>
                     </a>
                     {% endfor %}
                 </div>

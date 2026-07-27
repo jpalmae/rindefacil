@@ -757,6 +757,7 @@ def oidc_provider_new():
     return render_template(
         'admin/oidc_provider_form.html',
         provider=None,
+        company=current_user.company,
         preset=OIDC_PRESETS.get(preset, {}),
         preset_key=preset or '',
         can_encrypt=can_encrypt_settings(),
@@ -791,6 +792,7 @@ def oidc_provider_edit(provider_id):
     return render_template(
         'admin/oidc_provider_form.html',
         provider=provider,
+        company=current_user.company,
         preset={},
         preset_key='',
         can_encrypt=can_encrypt_settings(),
