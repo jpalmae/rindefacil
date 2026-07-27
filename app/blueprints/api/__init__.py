@@ -424,6 +424,17 @@ def _save_receipt(file_storage, company_id):
             code="unsupported_media_type",
         )
 
+    # Normalizar extensión según el contenido real (evita PDF con .png, etc.)
+    from app.services.upload_service import detect_extension, normalize_filename
+    detected_ext = detect_extension(file_storage)
+    if detected_ext and detected_ext not in ALLOWED_RECEIPT_EXTENSIONS:
+        return None, None, _error(
+            "El contenido del archivo no es un formato permitido (PNG, JPG, JPEG, WEBP o PDF).",
+            status=415,
+            code="unsupported_media_type",
+        )
+    filename = normalize_filename(filename, detected_ext)
+
     unique_name = f"{company_id}_{uuid.uuid4().hex}_{filename}"
     file_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
     file_storage.save(file_path)
@@ -434,6 +445,11 @@ def _extract_receipt_data_from_file(file_storage, user):
     filename = secure_filename(file_storage.filename or "receipt")
     if not filename:
         filename = "receipt"
+
+    # Normalizar extensión según contenido (consistencia con _save_receipt).
+    from app.services.upload_service import detect_extension, normalize_filename
+    detected_ext = detect_extension(file_storage)
+    filename = normalize_filename(filename, detected_ext)
 
     temp_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "temp")
     os.makedirs(temp_dir, exist_ok=True)
@@ -777,6 +793,16 @@ def analyze_expense_receipt():
     if ext not in ALLOWED_RECEIPT_EXTENSIONS:
         return _error(
             "Formato de comprobante no permitido. Usa PNG, JPG, JPEG, WEBP o PDF.",
+            status=415,
+            code="unsupported_media_type",
+        )
+
+    # Validar tipo real por contenido (no por extensión del filename).
+    from app.services.upload_service import detect_extension
+    detected_ext = detect_extension(file_storage)
+    if detected_ext and detected_ext not in ALLOWED_RECEIPT_EXTENSIONS:
+        return _error(
+            "El contenido del archivo no es un formato permitido (PNG, JPG, JPEG, WEBP o PDF).",
             status=415,
             code="unsupported_media_type",
         )

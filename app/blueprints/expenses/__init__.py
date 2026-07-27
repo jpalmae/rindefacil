@@ -31,6 +31,11 @@ def _store_uploaded_receipt(file_storage, company_id):
     if not filename:
         filename = "receipt"
 
+    # Normalizar extensión según el contenido real (evita PDF con .png, etc.)
+    from app.services.upload_service import detect_extension, normalize_filename
+    detected_ext = detect_extension(file_storage)
+    filename = normalize_filename(filename, detected_ext)
+
     unique_name = f"{company_id}_{uuid.uuid4().hex}_{filename}"
     file_path = os.path.join(current_app.config['UPLOAD_FOLDER'], unique_name)
     file_storage.save(file_path)
