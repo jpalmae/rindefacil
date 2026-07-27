@@ -190,8 +190,8 @@
                     </div>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
-                        <select name="category_id" id="category_id" class="input">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Categoría <span class="text-danger">*</span></label>
+                        <select name="category_id" id="category_id" class="input" required>
                             <option value="">Seleccione una categoría</option>
                             {% for cat in categories %}
                             <option value="{{ cat.id }}" {% if expense and expense.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>

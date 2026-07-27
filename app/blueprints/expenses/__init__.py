@@ -334,6 +334,9 @@ def _upsert_expense(expense=None):
     client_partner = request.form.get('client_partner')
     date_str = request.form.get('date')
     category_id = request.form.get('category_id') or None
+    if not category_id:
+        flash('Debes seleccionar una categoría para el gasto.', 'danger')
+        return redirect(request.url)
     description = request.form.get('description', '')
     receipt_time = _parse_time(request.form.get('receipt_time'))
     distance_km = _parse_non_negative_decimal(request.form.get('distance_km'))

@@ -983,6 +983,12 @@ def expenses_create():
         category = Category.query.filter_by(id=category_id, company_id=user.company_id).first()
         if not category:
             return _error("Categoria invalida para esta empresa.", status=422, code="validation_error")
+    else:
+        return _error(
+            "Debes indicar una categoria (category_id). Si usas OCR, anade el campo tras detectarlo.",
+            status=422,
+            code="validation_error",
+        )
 
     try:
         expense = Expense(
