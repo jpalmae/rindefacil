@@ -745,7 +745,6 @@ def oidc_provider_new():
             discovery_url=discovery_url,
             scopes=scopes,
             enabled=bool(request.form.get('enabled')),
-            auto_provision=bool(request.form.get('auto_provision')),
             allowed_domains=(request.form.get('allowed_domains') or '').strip() or None,
             icon_slug=(request.form.get('icon_slug') or '').strip() or None,
         )
@@ -775,7 +774,6 @@ def oidc_provider_edit(provider_id):
         provider.discovery_url = (request.form.get('discovery_url') or '').strip() or provider.discovery_url
         provider.scopes = (request.form.get('scopes') or '').strip() or 'openid profile email'
         provider.enabled = bool(request.form.get('enabled'))
-        provider.auto_provision = bool(request.form.get('auto_provision'))
         provider.allowed_domains = (request.form.get('allowed_domains') or '').strip() or None
         provider.icon_slug = (request.form.get('icon_slug') or '').strip() or None
 

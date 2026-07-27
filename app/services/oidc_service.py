@@ -163,13 +163,12 @@ def exchange_code_and_get_claims(provider: OidcProvider, code: str, redirect_uri
 
     claims: dict = {}
 
-    # 2) Validar id_token si viene
+    # 2) Validar id_token si viene (estricto: si falla, aborta el flujo).
     id_token = token_payload.get("id_token")
     if id_token and isinstance(id_token, str):
-        try:
-            claims = _validate_id_token(id_token, provider, discovery)
-        except Exception as exc:
-            logger.warning("No se pudo validar id_token para %s: %s", provider.slug, exc)
+        # Cualquier error de validación (firma, aud, iss, tid, exp) aborta.
+        # No tiene sentido continuar al userinfo con claims no verificados.
+        claims = _validate_id_token(id_token, provider, discovery)
 
     # 3) Traer claims extra del userinfo endpoint
     access_token = token_payload.get("access_token")
@@ -195,45 +194,67 @@ def exchange_code_and_get_claims(provider: OidcProvider, code: str, redirect_uri
 
 def _validate_id_token(id_token: str, provider: OidcProvider, discovery: dict) -> dict:
     jwks_uri = discovery.get("jwks_uri")
+    issuer = discovery.get("issuer")
+    if not issuer:
+        # Sin issuer conocido no podemos validar safe; rechazamos.
+        raise ValueError("OIDC discovery sin issuer; no se puede validar el id_token")
+
     if not jwks_uri:
-        logger.warning("Discovery sin jwks_uri para %s; salto validación de firma", provider.slug)
-        try:
-            return jwt.decode(id_token, options={"verify_signature": False})
-        except jwt.PyJWTError:
-            return {}
+        logger.warning("Discovery sin jwks_uri para %s; rechazando id_token", provider.slug)
+        raise ValueError("OIDC discovery sin jwks_uri")
 
     keys = _fetch_jwks(jwks_uri)
     if not keys:
-        return {}
+        raise ValueError("OIDC JWKS vacío para %s", provider.slug)
 
-    issuer = discovery.get("issuer")
     audience = provider.client_id
-    algorithms = ["RS256", "RS384", "RS512", "ES256", "ES384", "ES512"]
+    # Algoritmo fijado a RS256 (anti alg-confusion / alg=none).
+    algorithms = ["RS256"]
 
+    # Validación de tenant (tid) obligatoria para Microsoft.
+    provider_slug = (provider.slug or "").lower()
+    require_tid = provider_slug == "microsoft" or "microsoftonline" in (provider.discovery_url or "").lower()
+    expected_tenant = None
+    if require_tid:
+        # Extraer tenant del discovery URL de Microsoft.
+        # Formato típico: https://login.microsoftonline.com/{tenant}/v2.0
+        parts = (provider.discovery_url or "").split("/")
+        for i, p in enumerate(parts):
+            if "microsoftonline" in p and i + 1 < len(parts):
+                expected_tenant = parts[i + 1]
+                break
+
+    last_error: Exception | None = None
     for key_data in keys:
         try:
             kty = str(key_data.get("kty", "")).upper()
-            if kty == "RSA":
-                public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
-            elif kty == "EC":
-                public_key = jwt.algorithms.ECAlgorithm.from_jwk(key_data)
-            else:
+            if kty != "RSA":
                 continue
-            return jwt.decode(
+            public_key = jwt.algorithms.RSAAlgorithm.from_jwk(key_data)
+            claims = jwt.decode(
                 id_token,
                 key=public_key,
                 algorithms=algorithms,
                 audience=audience,
                 issuer=issuer,
-                options={"verify_exp": True},
+                options={"verify_exp": True, "verify_aud": True, "verify_iss": True},
             )
+            # Validación extra de tid para providers Microsoft.
+            if require_tid and expected_tenant:
+                token_tid = str(claims.get("tid", "")).strip()
+                if token_tid and token_tid != expected_tenant and expected_tenant != "common":
+                    raise ValueError(f"Token tid '{token_tid}' no coincide con tenant esperado '{expected_tenant}'")
+            return claims
         except jwt.ExpiredSignatureError:
             raise
-        except (jwt.PyJWTError, ValueError, KeyError, TypeError):
+        except (jwt.PyJWTError, ValueError) as exc:
+            last_error = exc
             continue
 
-    logger.warning("No se pudo validar id_token con ninguna llave JWKS para %s", provider.slug)
-    return {}
+    msg = f"No se pudo validar id_token con ninguna llave JWKS para {provider.slug}"
+    if last_error:
+        msg += f" (último error: {last_error})"
+    raise ValueError(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +304,13 @@ def _check_allowed_domains(email: str, provider: OidcProvider) -> None:
 
 
 def resolve_or_create_user(company, claims: dict, provider: OidcProvider) -> User:
-    """Busca usuario existente por oidc_subject o email; crea si auto_provision."""
+    """Busca usuario existente por oidc_subject o email.
+
+    No auto-provisiona: si el email no existe en rinde, deniega. El alta la
+    hace el admin de la app. En el primer login OIDC exitoso, ancla el
+    oidc_subject al usuario encontrado (UPDATE atómico con WHERE IS NULL
+    para evitar races entre sesiones concurrentes con el mismo email).
+    """
     subject = str(_extract_claim(claims, "sub") or "").strip()
     email = _normalize_email(_extract_claim(claims, "email"))
     display_name = _derive_display_name(claims)
@@ -299,36 +326,45 @@ def resolve_or_create_user(company, claims: dict, provider: OidcProvider) -> Use
     if not user and email:
         user = User.query.filter_by(email=email).first()
 
-    if not user and not provider.auto_provision:
-        raise PermissionError(
-            "Esta identidad no está registrada en la empresa. Contacta al administrador."
-        )
-
     if not user:
-        # Auto-provision como employee de la empresa
-        user = User(
-            company_id=company.id,
-            email=email or f"oidc_{secrets.token_hex(8)}@noemail.local",
-            full_name=display_name,
-            role=UserRole.EMPLOYEE,
-            is_active=True,
-            must_change_password=False,
-            password_hash="!",  # sin password local válida
-            auth_source="oidc",
-            oidc_subject=composite_sub,
+        # Sin auto-provisioning: el alta la hace el admin de la app.
+        raise PermissionError(
+            "Esta identidad no está registrada en la empresa. Pide al administrador que te dé de alta con tu email corporativo."
         )
-        db.session.add(user)
-        db.session.commit()
-        return user
 
-    # Actualizar usuario existente
+    if not user.is_active:
+        raise PermissionError("Tu cuenta está deshabilitada. Contacta al administrador.")
+
+    # Anclaje atómico del oidc_subject en el primer login OIDC.
+    if composite_sub and user.oidc_subject != composite_sub:
+        if user.oidc_subject is not None:
+            # Ya estaba anclado a otro subject distinto. Caso raro (rotación
+            # de IdP o cambio de tenant). Por seguridad, no sobreescribimos.
+            raise PermissionError(
+                "Tu cuenta ya está vinculada a otra identidad SSO. Contacta al administrador."
+            )
+        # UPDATE atómico: solo ancla si oidc_subject sigue siendo NULL.
+        # Si una sesión concurrente lo ancló primero, affected_rows = 0.
+        from sqlalchemy import update
+        result = db.session.execute(
+            update(User.__table__)
+            .where(User.id == user.id)
+            .where(User.oidc_subject.is_(None))
+            .values(oidc_subject=composite_sub, auth_source="oidc")
+        )
+        if result.rowcount == 0:
+            # Otra sesión ganó la race. Recargar y verificar consistencia.
+            db.session.refresh(user)
+            if user.oidc_subject != composite_sub:
+                raise PermissionError("Conflicto al vincular identidad SSO. Intenta nuevamente.")
+
+    # Refrescar email/display en cada login (Microsoft puede cambiarlos).
     if email and user.email != email:
         user.email = email
     if display_name and user.full_name != display_name:
         user.full_name = display_name
-    if composite_sub and user.oidc_subject != composite_sub:
-        user.oidc_subject = composite_sub
-    user.auth_source = "oidc"
+    if user.auth_source != "oidc":
+        user.auth_source = "oidc"
     db.session.commit()
     return user
 

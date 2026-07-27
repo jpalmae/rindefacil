@@ -20,7 +20,6 @@ class OidcProvider(db.Model):
     discovery_url = db.Column(db.String(1024), nullable=False)
     scopes = db.Column(db.String(512), nullable=False, default="openid profile email")
     enabled = db.Column(db.Boolean, nullable=False, default=True)
-    auto_provision = db.Column(db.Boolean, nullable=False, default=False)
     allowed_domains = db.Column(db.Text, nullable=True)
     icon_slug = db.Column(db.String(64), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())

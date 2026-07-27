@@ -605,6 +605,27 @@ def oidc_login(provider_id):
     return redirect(auth_url)
 
 
+def _audit_oidc_event(company_id, action, user_id=None, description=None, error=None):
+    """Escribe un evento de login OIDC al audit log sin depender de current_user."""
+    try:
+        from app.models.audit import AuditLog
+        log = AuditLog(
+            company_id=company_id,
+            user_id=user_id,
+            action=action,
+            entity_type='auth',
+            description=description or error,
+            changes={'provider': 'oidc', 'error': error} if error else {'provider': 'oidc'},
+            ip_address=request.remote_addr if request else None,
+            user_agent=request.user_agent.string if request and request.user_agent else None,
+        )
+        db.session.add(log)
+        db.session.commit()
+    except Exception as exc:
+        current_app.logger.warning('No se pudo escribir audit log OIDC: %s', exc)
+        db.session.rollback()
+
+
 @auth_bp.route('/oidc/callback', methods=['GET'])
 @limiter.limit('20/minute;60/hour')
 def oidc_callback():
@@ -635,6 +656,7 @@ def oidc_callback():
         slug=provider_slug, company_id=company_id, enabled=True
     ).first()
     if not provider:
+        _audit_oidc_event(company_id, 'login.oidc.invalid', description=f"Provider '{provider_slug}' no encontrado")
         flash('Proveedor de inicio de sesión no encontrado.', 'danger')
         return redirect(url_for('auth.login'))
 
@@ -650,20 +672,24 @@ def oidc_callback():
         claims = oidc_service.exchange_code_and_get_claims(provider, code, redirect_uri)
     except Exception as exc:
         current_app.logger.error('OIDC: fallo al canjear code para %s: %s', provider.slug, exc)
+        _audit_oidc_event(company_id, 'login.oidc.invalid', error=f"{provider.slug}: {exc}")
         flash('No se pudo completar la autenticación con ' + provider.name + '.', 'danger')
         return redirect(url_for('auth.login'))
 
     try:
         user = oidc_service.resolve_or_create_user(company, claims, provider)
     except PermissionError as exc:
+        _audit_oidc_event(company_id, 'login.oidc.unauthorized', description=str(exc))
         flash(str(exc), 'danger')
         return redirect(url_for('auth.login'))
     except Exception as exc:
         current_app.logger.error('OIDC: fallo al resolver usuario para %s: %s', provider.slug, exc)
+        _audit_oidc_event(company_id, 'login.oidc.error', error=f"{provider.slug}: {exc}")
         flash('No se pudo procesar tu usuario. Contacta al administrador.', 'danger')
         return redirect(url_for('auth.login'))
 
     if not user.is_active:
+        _audit_oidc_event(company_id, 'login.oidc.unauthorized', user_id=user.id, description="cuenta inactiva")
         flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
         return redirect(url_for('auth.login'))
 
@@ -671,5 +697,6 @@ def oidc_callback():
     login_user(user, remember=False)
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
+    _audit_oidc_event(company_id, 'login.oidc.ok', user_id=user.id, description=f"Login exitoso con {provider.name}")
     flash('Sesión iniciada con ' + provider.name + '.', 'success')
     return redirect(url_for('dashboard.index'))

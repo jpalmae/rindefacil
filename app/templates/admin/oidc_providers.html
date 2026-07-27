@@ -35,7 +35,6 @@
                 <tr>
                     <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Provider</th>
                     <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Slug</th>
-                    <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Auto-provision</th>
                     <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Estado</th>
                     <th class="px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Acciones</th>
                 </tr>
@@ -43,7 +42,7 @@
             <tbody class="divide-y divide-gray-50">
                 {% if not providers %}
                 <tr>
-                    <td colspan="5" class="px-6 py-10 text-center text-sm text-gray-500">
+                    <td colspan="4" class="px-6 py-10 text-center text-sm text-gray-500">
                         No hay providers configurados. Agrega Google o Microsoft para empezar.
                     </td>
                 </tr>
@@ -63,13 +62,6 @@
                         </div>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-500">{{ p.slug }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap">
-                        {% if p.auto_provision %}
-                        <span class="badge border border-green-200 bg-green-50 text-green-700 text-[9px] px-2 py-0.5">Auto</span>
-                        {% else %}
-                        <span class="text-[10px] text-gray-400 italic">Manual</span>
-                        {% endif %}
-                    </td>
                     <td class="px-6 py-4 whitespace-nowrap">
                         {% if p.enabled %}
                         <span class="flex items-center gap-1.5 text-[10px] font-bold text-success uppercase tracking-widest">
@@ -107,7 +99,7 @@
         <ul class="mt-3 space-y-2 text-sm text-gray-600 list-disc pl-5">
             <li><strong>OIDC estándar:</strong> funciona con cualquier IdP que cumpla OIDC (Google, Microsoft, Auth0, Okta, Keycloak).</li>
             <li><strong>Client Secret:</strong> se guarda cifrado con Fernet (SETTINGS_ENCRYPTION_KEY).</li>
-            <li><strong>Auto-provision:</strong> si lo activas, el primer login de un usuario del IdP crea su cuenta en {{ company.name }} automáticamente con rol Employee.</li>
+            <li><strong>Sin auto-provisioning:</strong> los usuarios deben existir previamente en {{ company.name }} con su email corporativo. El login SSO no crea cuentas. Da de alta al usuario primero desde <a href="{{ url_for('admin.user_new') }}" class="text-primary hover:underline">Usuarios</a>.</li>
             <li><strong>Dominios permitidos:</strong> restringe por dominio de email (ej: <code>midominio.cl</code>), separados por coma. Vacío permite todos.</li>
             <li><strong>MFA:</strong> los usuarios que entran por SSO no pasan por el MFA por email de la app (se asume que el IdP gestiona 2FA).</li>
             {% if not can_encrypt %}

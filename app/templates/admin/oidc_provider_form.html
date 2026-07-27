@@ -77,10 +77,12 @@
                     <input type="checkbox" name="enabled" value="1" {% if not provider or provider.enabled %}checked{% endif %}>
                     Habilitado
                 </label>
-                <label class="inline-flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <input type="checkbox" name="auto_provision" value="1" {% if provider and provider.auto_provision %}checked{% endif %}>
-                    Auto-provisionar usuarios nuevos (crear cuenta automáticamente en el primer login)
-                </label>
+            </div>
+
+            <div class="mt-4 p-3 rounded-xl bg-sky-50/60 border border-sky-200/60 text-xs text-gray-700 leading-relaxed">
+                <strong>Importante:</strong> los usuarios deben existir previamente en {{ company.name }} con su email corporativo.
+                El login SSO no crea cuentas automáticamente. Si necesitas dar acceso a alguien nuevo, créalo primero desde
+                <a href="{{ url_for('admin.user_new') }}" class="text-primary hover:underline">Usuarios</a>.
             </div>
 
             <div class="pt-4 border-t border-gray-200 flex justify-end gap-3">
