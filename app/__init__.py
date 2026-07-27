@@ -2,6 +2,7 @@ import os
 
 from flask import Flask, render_template
 from flask_login import current_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import config
 from app.extensions import db, login_manager, migrate, mail, cors, limiter
@@ -13,6 +14,10 @@ def create_app(config_name=None):
 
     app = Flask(__name__)
     app.config.from_object(config[config_name])
+
+    # Confiar en los headers X-Forwarded-* del proxy (Cloudflare/Nginx) para
+    # que url_for(_external=True) genere URLs con el esquema y host correctos.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     if config_name == 'production':
         secret_key = app.config.get('SECRET_KEY') or ''
