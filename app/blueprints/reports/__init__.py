@@ -241,7 +241,18 @@ def index():
             'mine': [report for report in finance_reports if report.user_id == current_user.id],
             'finance': finance_reports,
         }
-        default_scope = 'finance'
+        # Si también es manager, incluir pendientes de su aprobación.
+        if current_user.has_role('manager'):
+            pending_candidates = base_query.filter(
+                Report.company_id == current_user.company_id,
+                Report.status.in_(REVIEW_STATUSES),
+            ).order_by(Report.created_at.desc()).all()
+            report_views['pending'] = [
+                report for report in pending_candidates if _can_user_approve_report(report)
+            ]
+            default_scope = 'pending' if report_views['pending'] else 'finance'
+        else:
+            default_scope = 'finance'
     elif current_user.has_role('manager'):
         # Manager (no admin, no finanzas): propias + rendiciones donde es
         # aprobador del paso actual del flujo (por rol, usuario o como jefe
