@@ -1649,3 +1649,270 @@ def reports_mark_paid(report_id):
         db.session.rollback()
         current_app.logger.error("Error marcando rendicion como pagada via API: %s", exc)
         return _error("No se pudo marcar la rendicion como pagada.", status=500, code="server_error")
+
+
+# ---------------------------------------------------------------------------
+# CRUD faltante: detalle, editar y eliminar gastos; eliminar rendiciones;
+# quitar gasto de rendición. Misma lógica que la web.
+# ---------------------------------------------------------------------------
+
+def _can_api_user_modify_expense(user, expense):
+    """True si el usuario puede editar/eliminar el gasto (mismo criterio que web)."""
+    if expense.company_id != user.company_id:
+        return False
+    if expense.user_id != user.id and not _is_admin_like(user):
+        return False
+    if expense.status != ExpenseStatus.DRAFT:
+        return False
+    if expense.report_id and expense.report and expense.report.status != ReportStatus.DRAFT:
+        return False
+    return True
+
+
+def _can_api_user_manage_report(user, report):
+    """True si el usuario puede administrar la rendición (delete/remove expense)."""
+    if report.company_id != user.company_id:
+        return False
+    return report.user_id == user.id or _is_admin_like(user)
+
+
+@api_bp.route("/expenses/<uuid:expense_id>", methods=["GET"])
+@api_auth_required
+def expense_detail(expense_id):
+    user = g.api_user
+    expense = Expense.query.options(selectinload(Expense.category)).filter_by(id=expense_id).first()
+    if not expense or expense.company_id != user.company_id:
+        return _error("Gasto no encontrado.", status=404, code="not_found")
+    if expense.user_id != user.id and not _is_admin_like(user):
+        return _error("Gasto no encontrado.", status=404, code="not_found")
+    return _ok({"expense": _serialize_expense(expense)})
+
+
+@api_bp.route("/expenses/<uuid:expense_id>", methods=["PUT"])
+@api_auth_required
+def expense_update(expense_id):
+    user = g.api_user
+    data = request.get_json(silent=True) or {}
+    expense = Expense.query.options(selectinload(Expense.category)).filter_by(id=expense_id).first()
+    if not expense or expense.company_id != user.company_id:
+        return _error("Gasto no encontrado.", status=404, code="not_found")
+    if not _can_api_user_modify_expense(user, expense):
+        return _error(
+            "No puedes editar este gasto. Solo se pueden editar gastos en borrador que no estén en una rendición enviada.",
+            status=403,
+            code="forbidden",
+        )
+
+    changes = {}
+
+    # Campos editables
+    if "description" in data:
+        expense.description = (data.get("description") or "").strip()
+        changes["description"] = True
+
+    if "merchant" in data:
+        expense.merchant = (data.get("merchant") or "").strip() or None
+        changes["merchant"] = True
+
+    if "amount" in data or "currency" in data:
+        currency = data.get("currency")
+        if currency and currency in {ExpenseCurrency.CLP, ExpenseCurrency.USD}:
+            expense.currency = currency
+            changes["currency"] = True
+        else:
+            currency = expense.currency
+
+        amount_raw = data.get("amount")
+        if amount_raw is not None:
+            amount = _parse_amount(amount_raw, currency=currency)
+            if amount is None or amount <= 0:
+                return _error("Monto invalido.", status=422, code="validation_error")
+            expense.amount = amount
+            changes["amount"] = True
+
+            if currency == ExpenseCurrency.USD:
+                exchange_rate = _parse_amount(data.get("exchange_rate")) if data.get("exchange_rate") else expense.exchange_rate
+                if exchange_rate and exchange_rate > 0:
+                    expense.exchange_rate = exchange_rate
+                    changes["exchange_rate"] = True
+                amount_clp = (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if exchange_rate else None
+                expense.amount_clp = amount_clp or amount
+            else:
+                expense.exchange_rate = None
+                expense.amount_clp = amount
+
+    if "date" in data:
+        date_str = (data.get("date") or "").strip()
+        if date_str:
+            try:
+                if "/" in date_str:
+                    parts = date_str.replace("-", "/").split("/")
+                    expense.date = date(int(parts[2]), int(parts[1]), int(parts[0]))
+                else:
+                    expense.date = date.fromisoformat(date_str)
+                changes["date"] = True
+            except (ValueError, IndexError):
+                return _error("Formato de fecha invalido. Usa YYYY-MM-DD o DD/MM/YYYY.", status=422, code="validation_error")
+
+    if "category_id" in data:
+        category_id = _uuid_or_none(data.get("category_id"))
+        if category_id:
+            category = Category.query.filter_by(id=category_id, company_id=user.company_id).first()
+            if not category:
+                return _error("Categoria invalida para esta empresa.", status=422, code="validation_error")
+            expense.category_id = category.id
+        else:
+            return _error("Debes indicar una categoria valida.", status=422, code="validation_error")
+        changes["category_id"] = True
+
+    # Si el gasto está en una rendición borrador, recalcular el total
+    if expense.report_id and changes:
+        report = expense.report
+        if report and report.status == ReportStatus.DRAFT:
+            report.total_amount = db.session.query(
+                func.coalesce(func.sum(Expense.amount_clp), Decimal("0"))
+            ).filter(
+                Expense.report_id == report.id
+            ).scalar() or Decimal("0")
+
+    try:
+        _audit(
+            user,
+            action="api_expense_updated",
+            entity_type="expense",
+            entity_id=expense.id,
+            description=f"Gasto editado via API. Campos: {', '.join(changes.keys()) if changes else 'sin cambios'}.",
+            changes={k: True for k in changes} if changes else None,
+        )
+        db.session.commit()
+        return _ok({"expense": _serialize_expense(expense), "updated_fields": list(changes.keys())})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error editando gasto via API: %s", exc)
+        return _error("No se pudo editar el gasto.", status=500, code="server_error")
+
+
+@api_bp.route("/expenses/<uuid:expense_id>", methods=["DELETE"])
+@api_auth_required
+def expense_delete(expense_id):
+    user = g.api_user
+    expense = Expense.query.filter_by(id=expense_id).first()
+    if not expense or expense.company_id != user.company_id:
+        return _error("Gasto no encontrado.", status=404, code="not_found")
+    if not _can_api_user_modify_expense(user, expense):
+        return _error(
+            "No puedes eliminar este gasto. Solo se pueden eliminar gastos en borrador que no estén en una rendición.",
+            status=403,
+            code="forbidden",
+        )
+
+    try:
+        expense_id_str = str(expense.id)
+        db.session.delete(expense)
+        _audit(
+            user,
+            action="api_expense_deleted",
+            entity_type="expense",
+            entity_id=None,
+            description=f"Gasto {expense_id_str} eliminado via API.",
+        )
+        db.session.commit()
+        return _ok({"message": "Gasto eliminado.", "id": expense_id_str})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error eliminando gasto via API: %s", exc)
+        return _error("No se pudo eliminar el gasto.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>", methods=["DELETE"])
+@api_auth_required
+def report_delete(report_id):
+    user = g.api_user
+    report = Report.query.options(selectinload(Report.expenses)).filter_by(id=report_id).first()
+    if not report or report.company_id != user.company_id:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+    if not _can_api_user_manage_report(user, report) or report.status not in EDITABLE_REPORT_STATUSES:
+        return _error(
+            "Solo puedes eliminar rendiciones en borrador o con antecedentes solicitados, y que sean tuyas.",
+            status=403,
+            code="forbidden",
+        )
+
+    try:
+        detached = 0
+        for expense in report.expenses.all():
+            expense.report_id = None
+            expense.status = ExpenseStatus.DRAFT
+            detached += 1
+
+        report_title = report.title
+        report_id_str = str(report.id)
+        db.session.delete(report)
+        _audit(
+            user,
+            action="api_report_deleted",
+            entity_type="report",
+            entity_id=None,
+            description=f"Rendicion '{report_title}' eliminada via API. {detached} gasto(s) volvieron a borrador.",
+        )
+        db.session.commit()
+        return _ok({"message": "Rendicion eliminada.", "id": report_id_str, "detached_expenses": detached})
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error eliminando rendicion via API: %s", exc)
+        return _error("No se pudo eliminar la rendicion.", status=500, code="server_error")
+
+
+@api_bp.route("/reports/<uuid:report_id>/remove-expense", methods=["POST"])
+@api_auth_required
+def report_remove_expense(report_id):
+    user = g.api_user
+    data = request.get_json(silent=True) or {}
+    expense_id = _uuid_or_none(data.get("expense_id"))
+    if not expense_id:
+        return _error("Debes indicar expense_id.", status=422, code="validation_error")
+
+    report = Report.query.filter_by(id=report_id).first()
+    if not report or report.company_id != user.company_id:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+    if not _can_api_user_manage_report(user, report) or report.status not in EDITABLE_REPORT_STATUSES:
+        return _error(
+            "Solo puedes modificar rendiciones en borrador o con antecedentes solicitados.",
+            status=403,
+            code="forbidden",
+        )
+
+    expense = Expense.query.filter_by(id=expense_id, report_id=report.id).first()
+    if not expense:
+        return _error("El gasto no pertenece a esta rendicion.", status=404, code="not_found")
+
+    try:
+        if expense.duplicate_of_id == expense.id:
+            expense.is_duplicate = False
+            expense.duplicate_of_id = None
+        expense.report_id = None
+        expense.status = ExpenseStatus.DRAFT
+
+        # Recalcular total de la rendición
+        report.total_amount = db.session.query(
+            func.coalesce(func.sum(Expense.amount_clp), Decimal("0"))
+        ).filter(
+            Expense.report_id == report.id
+        ).scalar() or Decimal("0")
+
+        _audit(
+            user,
+            action="api_report_expense_removed",
+            entity_type="report",
+            entity_id=report.id,
+            description=f"Gasto {expense.id} quitado de rendicion '{report.title}' via API.",
+        )
+        db.session.commit()
+        return _ok({
+            "message": "Gasto quitado de la rendicion.",
+            "report": _serialize_report(report, include_expenses=True),
+        })
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error("Error quitando gasto de rendicion via API: %s", exc)
+        return _error("No se pudo quitar el gasto de la rendicion.", status=500, code="server_error")
