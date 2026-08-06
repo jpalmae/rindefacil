@@ -19,6 +19,7 @@ from app.models import (
     ApprovalStep,
     AuditLog,
     Category,
+    CostCenter,
     Expense,
     ExpenseCurrency,
     ExpenseStatus,
@@ -1916,3 +1917,450 @@ def report_remove_expense(report_id):
         db.session.rollback()
         current_app.logger.error("Error quitando gasto de rendicion via API: %s", exc)
         return _error("No se pudo quitar el gasto de la rendicion.", status=500, code="server_error")
+
+
+# ===========================================================================
+# Analytics & BI
+# ===========================================================================
+
+def _require_finance_or_admin(user):
+    if not (_is_admin_like(user) or user.has_finance_report_access):
+        return False
+    return True
+
+
+def _analytics_base_query(user, params):
+    """Base query for expense analytics with common filters."""
+    query = Expense.query.filter(Expense.company_id == user.company_id)
+
+    date_from = params.get("date_from", type=str)
+    date_to = params.get("date_to", type=str)
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+
+    status = params.get("status", type=str)
+    if status and status in {"draft", "approved", "paid", "rejected"}:
+        query = query.filter(Expense.status == status)
+
+    settlement_type = params.get("settlement_type", type=str)
+    if settlement_type and settlement_type in {"employee_reimbursement", "corporate_card"}:
+        query = query.query.filter(Expense.settlement_type == settlement_type) if hasattr(Expense, "settlement_type") else query
+
+    return query
+
+
+# --- Datos maestros ---
+
+@api_bp.route("/cost-centers", methods=["GET"])
+@api_auth_required
+def cost_centers_list():
+    user = g.api_user
+    if not _is_admin_like(user):
+        return _error("Requiere permisos de administrador.", status=403, code="forbidden")
+    centers = CostCenter.query.filter_by(company_id=user.company_id).order_by(CostCenter.name.asc()).all()
+    return _ok({"cost_centers": [
+        {
+            "id": str(c.id),
+            "code": c.code,
+            "name": c.name,
+            "monthly_budget": _decimal_as_text(c.monthly_budget),
+        }
+        for c in centers
+    ]})
+
+
+@api_bp.route("/users", methods=["GET"])
+@api_auth_required
+def users_list():
+    user = g.api_user
+    if not _is_admin_like(user):
+        return _error("Requiere permisos de administrador.", status=403, code="forbidden")
+    users = User.query.filter_by(company_id=user.company_id, is_active=True).order_by(User.full_name.asc()).all()
+    return _ok({"users": [
+        {
+            "id": str(u.id),
+            "full_name": u.full_name,
+            "email": u.email,
+            "role": u.role,
+            "cost_center_id": str(u.cost_center_id) if u.cost_center_id else None,
+        }
+        for u in users
+    ]})
+
+
+# --- Analytics agregados ---
+
+@api_bp.route("/analytics/summary", methods=["GET"])
+@api_auth_required
+def analytics_summary():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    base = _analytics_base_query(user, request.args)
+
+    total_clp = db.session.query(func.coalesce(func.sum(Expense.amount_clp), 0)).filter(
+        Expense.company_id == user.company_id
+    ).scalar()
+    total_count = Expense.query.filter_by(company_id=user.company_id).count()
+
+    by_status = {}
+    for status_val, label in [("draft", "draft"), ("approved", "approved"), ("paid", "paid"), ("rejected", "rejected")]:
+        row = db.session.query(
+            func.coalesce(func.sum(Expense.amount_clp), 0),
+            func.count(Expense.id)
+        ).filter(
+            Expense.company_id == user.company_id,
+            Expense.status == status_val
+        ).one()
+        by_status[label] = {"total_clp": _decimal_as_text(row[0]), "count": row[1]}
+
+    reports_count = Report.query.filter_by(company_id=user.company_id).count()
+    reports_paid = Report.query.filter_by(company_id=user.company_id, status=ReportStatus.PAID).count()
+    reports_pending = Report.query.filter(
+        Report.company_id == user.company_id,
+        Report.status.in_([ReportStatus.UNDER_REVIEW, ReportStatus.SUBMITTED])
+    ).count()
+
+    return _ok({
+        "expenses": {
+            "total_clp": _decimal_as_text(total_clp),
+            "total_count": total_count,
+            "by_status": by_status,
+        },
+        "reports": {
+            "total_count": reports_count,
+            "paid": reports_paid,
+            "pending_review": reports_pending,
+        },
+    })
+
+
+@api_bp.route("/analytics/by-category", methods=["GET"])
+@api_auth_required
+def analytics_by_category():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    date_from = request.args.get("date_from", type=str)
+    date_to = request.args.get("date_to", type=str)
+    status = request.args.get("status", type=str)
+
+    query = db.session.query(
+        Category.name,
+        func.coalesce(func.sum(Expense.amount_clp), 0).label("total_clp"),
+        func.count(Expense.id).label("count")
+    ).join(Expense, Expense.category_id == Category.id).filter(
+        Expense.company_id == user.company_id
+    )
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+    if status and status in {"draft", "approved", "paid", "rejected"}:
+        query = query.filter(Expense.status == status)
+
+    rows = query.group_by(Category.id, Category.name).order_by(func.sum(Expense.amount_clp).desc()).all()
+
+    return _ok({"by_category": [
+        {"category": row[0], "total_clp": _decimal_as_text(row[1]), "count": row[2]}
+        for row in rows
+    ]})
+
+
+@api_bp.route("/analytics/by-cost-center", methods=["GET"])
+@api_auth_required
+def analytics_by_cost_center():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    date_from = request.args.get("date_from", type=str)
+    date_to = request.args.get("date_to", type=str)
+
+    query = db.session.query(
+        CostCenter.name,
+        CostCenter.monthly_budget,
+        func.coalesce(func.sum(Expense.amount_clp), 0).label("actual"),
+        func.count(Expense.id).label("count")
+    ).join(Expense, Expense.cost_center_id == CostCenter.id, isouter=True).filter(
+        CostCenter.company_id == user.company_id
+    )
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+
+    rows = query.group_by(CostCenter.id, CostCenter.name, CostCenter.monthly_budget).order_by(
+        func.sum(Expense.amount_clp).desc()
+    ).all()
+
+    return _ok({"by_cost_center": [
+        {
+            "name": row[0],
+            "monthly_budget": _decimal_as_text(row[1]),
+            "actual": _decimal_as_text(row[2]),
+            "count": row[3],
+        }
+        for row in rows
+    ]})
+
+
+@api_bp.route("/analytics/by-user", methods=["GET"])
+@api_auth_required
+def analytics_by_user():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    date_from = request.args.get("date_from", type=str)
+    date_to = request.args.get("date_to", type=str)
+    limit = request.args.get("limit", default=20, type=int) or 20
+    limit = max(1, min(limit, 100))
+
+    query = db.session.query(
+        User.full_name,
+        func.coalesce(func.sum(Expense.amount_clp), 0).label("total_clp"),
+        func.count(Expense.id).label("count")
+    ).join(Expense, Expense.user_id == User.id).filter(
+        Expense.company_id == user.company_id
+    )
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+
+    rows = query.group_by(User.id, User.full_name).order_by(func.sum(Expense.amount_clp).desc()).limit(limit).all()
+
+    return _ok({"by_user": [
+        {"full_name": row[0], "total_clp": _decimal_as_text(row[1]), "count": row[2]}
+        for row in rows
+    ]})
+
+
+@api_bp.route("/analytics/by-month", methods=["GET"])
+@api_auth_required
+def analytics_by_month():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    status = request.args.get("status", type=str)
+
+    query = db.session.query(
+        func.to_char(Expense.date, "YYYY-MM").label("month"),
+        func.coalesce(func.sum(Expense.amount_clp), 0).label("total_clp"),
+        func.count(Expense.id).label("count")
+    ).filter(
+        Expense.company_id == user.company_id
+    )
+    if status and status in {"draft", "approved", "paid", "rejected"}:
+        query = query.filter(Expense.status == status)
+
+    rows = query.group_by("month").order_by("month").all()
+
+    return _ok({"by_month": [
+        {"month": row[0], "total_clp": _decimal_as_text(row[1]), "count": row[2]}
+        for row in rows
+    ]})
+
+
+@api_bp.route("/analytics/by-status", methods=["GET"])
+@api_auth_required
+def analytics_by_status():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    # Rendiciones por estado
+    report_rows = db.session.query(
+        Report.status,
+        func.count(Report.id),
+        func.coalesce(func.sum(Report.total_amount), 0)
+    ).filter(
+        Report.company_id == user.company_id
+    ).group_by(Report.status).all()
+
+    return _ok({"reports_by_status": [
+        {"status": row[0], "count": row[1], "total_clp": _decimal_as_text(row[2])}
+        for row in report_rows
+    ]})
+
+
+@api_bp.route("/analytics/top-merchants", methods=["GET"])
+@api_auth_required
+def analytics_top_merchants():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    limit = request.args.get("limit", default=10, type=int) or 10
+    limit = max(1, min(limit, 50))
+    date_from = request.args.get("date_from", type=str)
+    date_to = request.args.get("date_to", type=str)
+
+    query = db.session.query(
+        Expense.merchant,
+        func.coalesce(func.sum(Expense.amount_clp), 0).label("total_clp"),
+        func.count(Expense.id).label("count")
+    ).filter(
+        Expense.company_id == user.company_id,
+        Expense.merchant.isnot(None),
+        Expense.merchant != "",
+    )
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+
+    rows = query.group_by(Expense.merchant).order_by(func.sum(Expense.amount_clp).desc()).limit(limit).all()
+
+    return _ok({"top_merchants": [
+        {"merchant": row[0], "total_clp": _decimal_as_text(row[1]), "count": row[2]}
+        for row in rows
+    ]})
+
+
+@api_bp.route("/analytics/fraud-signals", methods=["GET"])
+@api_auth_required
+def analytics_fraud_signals():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    rows = db.session.query(
+        Expense.gps_validation_status,
+        func.count(Expense.id),
+        func.coalesce(func.avg(Expense.gps_validation_score), 0)
+    ).filter(
+        Expense.company_id == user.company_id
+    ).group_by(Expense.gps_validation_status).all()
+
+    return _ok({"fraud_signals": [
+        {
+            "status": row[0],
+            "count": row[1],
+            "avg_score": _decimal_as_text(row[2]),
+        }
+        for row in rows
+    ]})
+
+
+# --- Exports ---
+
+@api_bp.route("/expenses/export", methods=["GET"])
+@api_auth_required
+def expenses_export_csv():
+    user = g.api_user
+    if not _require_finance_or_admin(user):
+        return _error("Requiere permisos de finanzas o administrador.", status=403, code="forbidden")
+
+    import csv
+    import io as _io
+
+    date_from = request.args.get("date_from", type=str)
+    date_to = request.args.get("date_to", type=str)
+    status = request.args.get("status", type=str)
+
+    query = Expense.query.options(selectinload(Expense.category), selectinload(Expense.user)).filter(
+        Expense.company_id == user.company_id
+    )
+    if date_from:
+        try:
+            query = query.filter(Expense.date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            query = query.filter(Expense.date < date.fromisoformat(date_to) + timedelta(days=1))
+        except ValueError:
+            pass
+    if status and status in {"draft", "approved", "paid", "rejected"}:
+        query = query.filter(Expense.status == status)
+
+    expenses = query.order_by(Expense.date.desc()).all()
+
+    buf = _io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "id", "public_id", "fecha", "descripcion", "comercio", "categoria",
+        "monto", "moneda", "monto_clp", "estado", "usuario", "tipo_gasto",
+        "validacion_gps", "es_duplicado", "creado_en",
+    ])
+    for exp in expenses:
+        writer.writerow([
+            str(exp.id),
+            exp.public_id or "",
+            exp.date.isoformat() if exp.date else "",
+            exp.description or "",
+            exp.merchant or "",
+            exp.category.name if exp.category else "",
+            _decimal_as_text(exp.amount),
+            exp.currency,
+            _decimal_as_text(exp.amount_clp),
+            exp.status,
+            exp.user.full_name if exp.user else "",
+            exp.expense_type or "",
+            exp.gps_validation_status or "",
+            "si" if exp.is_duplicate else "no",
+            exp.created_at.isoformat() if exp.created_at else "",
+        ])
+
+    buf.seek(0)
+    from flask import Response
+    return Response(
+        buf.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=gastos_{date.today().isoformat()}.csv"},
+    )
+
+
+@api_bp.route("/reports/<uuid:report_id>/export", methods=["GET"])
+@api_auth_required
+def report_export_pdf(report_id):
+    user = g.api_user
+    report = Report.query.filter_by(id=report_id).first()
+    if not report or report.company_id != user.company_id:
+        return _error("Rendicion no encontrada.", status=404, code="not_found")
+    if report.user_id != user.id and not _is_admin_like(user) and not user.has_finance_report_access:
+        return _error("No tienes permiso para exportar esta rendicion.", status=403, code="forbidden")
+
+    from app.services.export_service import generate_report_pdf
+    try:
+        return generate_report_pdf(report)
+    except Exception as exc:
+        current_app.logger.error("Error exportando PDF via API: %s", exc)
+        return _error("No se pudo generar el PDF.", status=500, code="server_error")
