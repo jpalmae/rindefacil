@@ -67,7 +67,7 @@ def _error(message, status=400, code="bad_request", details=None):
 
 
 def _is_admin_like(user):
-    return user.role in {UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.MANAGER}
+    return user.role in {UserRole.SUPERADMIN, UserRole.ADMIN}
 
 
 def _parse_amount(value, currency=None):
@@ -621,7 +621,13 @@ def _user_can_view_report(user, report):
         return False
     if report.user_id == user.id or _is_admin_like(user):
         return True
-    return user.has_finance_report_access and report.status in FINANCE_VISIBLE_STATUSES
+    if user.has_finance_report_access and report.status in FINANCE_VISIBLE_STATUSES:
+        return True
+    # Manager: puede ver rendiciones que están en revisión (podría ser
+    # el aprobador del paso actual del flujo).
+    if user.has_role(UserRole.MANAGER) and report.status in REVIEW_STATUSES:
+        return True
+    return False
 
 
 def _user_can_mark_report_paid(user, report):
@@ -831,8 +837,19 @@ def expenses_list():
     query = Expense.query.options(selectinload(Expense.category)).order_by(Expense.created_at.desc())
 
     if _is_admin_like(user):
+        # Admin: toda la empresa.
         query = query.filter(Expense.company_id == user.company_id)
+    elif user.has_finance_report_access:
+        # Finanzas: propios + aprobados/pagados de la empresa.
+        query = query.filter(
+            Expense.company_id == user.company_id,
+            or_(
+                Expense.user_id == user.id,
+                Expense.status.in_([ExpenseStatus.APPROVED, ExpenseStatus.PAID]),
+            ),
+        )
     else:
+        # Empleado / manager (sin finanzas): solo propios.
         query = query.filter(Expense.user_id == user.id)
 
     status_filter = request.args.get("status")
@@ -1083,8 +1100,10 @@ def reports_list():
 
     query = Report.query.options(joinedload(Report.user)).order_by(Report.created_at.desc())
     if _is_admin_like(user):
+        # Admin: todas las de la empresa.
         query = query.filter(Report.company_id == user.company_id)
     elif user.has_finance_report_access:
+        # Finanzas: propias + aprobadas/pagadas.
         query = query.filter(
             Report.company_id == user.company_id,
             or_(
@@ -1092,7 +1111,17 @@ def reports_list():
                 Report.status.in_(FINANCE_VISIBLE_STATUSES),
             ),
         )
+    elif user.has_role(UserRole.MANAGER):
+        # Manager: propias + en revisión (puede ser aprobador del flujo).
+        query = query.filter(
+            Report.company_id == user.company_id,
+            or_(
+                Report.user_id == user.id,
+                Report.status.in_(REVIEW_STATUSES),
+            ),
+        )
     else:
+        # Empleado: solo propias.
         query = query.filter(Report.user_id == user.id)
 
     status_filter = request.args.get("status")
@@ -1685,7 +1714,9 @@ def expense_detail(expense_id):
     if not expense or expense.company_id != user.company_id:
         return _error("Gasto no encontrado.", status=404, code="not_found")
     if expense.user_id != user.id and not _is_admin_like(user):
-        return _error("Gasto no encontrado.", status=404, code="not_found")
+        # Finanzas puede ver gastos aprobados/pagados de otros.
+        if not (user.has_finance_report_access and expense.status in [ExpenseStatus.APPROVED, ExpenseStatus.PAID]):
+            return _error("Gasto no encontrado.", status=404, code="not_found")
     return _ok({"expense": _serialize_expense(expense)})
 
 
