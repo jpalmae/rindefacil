@@ -5,30 +5,27 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 ## Funcionalidades principales
 
 - Gestión de gastos con adjunto de comprobante (imagen/PDF).
+- **Categoría obligatoria** al crear y editar gastos (web y API).
 - Los comprobantes subidos desde web/API se guardan con nombre único para evitar colisiones y sobreescritura entre gastos distintos.
-- OCR con IA vía OpenRouter al subir la boleta (autocompletado de monto, comercio, fecha y categoría), incluyendo PDF convertido internamente a imagen para análisis.
+- **Validación de archivos por contenido (magic bytes)**: si un agente o usuario sube un PDF con extensión `.png`, el sistema detecta el tipo real y normaliza la extensión automáticamente.
+- OCR con IA configurable por empresa: **OpenRouter (cloud)** o **servidor local OpenAI-compatible** (Ollama, LMStudio, vLLM, llama.cpp, LiteLLM). Autocompletado de monto, comercio, fecha y categoría.
 - Vista previa embebida del comprobante en el formulario, con apertura ampliada para imágenes y PDF.
-- En `Mis Gastos`, los comprobantes PDF se muestran con acceso directo correcto al visor ampliado.
 - Normalización de montos para formato local (CLP): separador de miles y decimales.
 - Soporte de gastos en CLP y USD con conversión a CLP para reportes, políticas, dashboard y aprobación.
 - Tipo de gasto `Vehículo particular` con cálculo automático por tramo y boleta opcional de combustible como respaldo.
-- `Mis Gastos` muestra más contexto por gasto (motivo, cliente/partner y datos de kilometraje cuando aplica).
-- Los gastos en borrador pueden editarse mientras no hayan sido enviados a aprobación; si están dentro de una rendición borrador, también pueden quitarse de ella.
 - Detección de duplicados por hash de imagen y por monto/fecha.
 - GPS obligatorio al crear gastos (captura de coordenadas + dirección aproximada).
-- Validación antifraude con score combinado (`match`, `partial`, `mismatch`):
-  comercio↔ubicación + fecha boleta↔rendición + hora boleta↔rendición (margen 20 min).
-  Incluye además regla horaria habitual: L-V entre 09:00 y 19:00.
-- Rendiciones con múltiples gastos.
-- Tipo de rendición: solicitud de devolución o tarjeta corporativa.
-- En `Rendiciones`, los usuarios pueden filtrar sus propias rendiciones por `Pendientes de devolución`, `Pagadas` y `Tarjeta corporativa`.
-- En `Rendiciones -> Finanzas`, los usuarios con permisos financieros pueden subfiltrar por `Pagadas` y `Tarjeta corporativa`.
+- Validación antifraude con score combinado (`match`, `partial`, `mismatch`).
+- Rendiciones con múltiples gastos. Tipo: solicitud de devolución o tarjeta corporativa.
 - Flujo de aprobación configurable por pasos (`rol`, `usuario`, `manager`).
-- Si un paso del flujo usa `manager` y el solicitante no tiene manager asignado, el sistema omite ese paso y avanza automáticamente al siguiente aprobador válido.
 - Solicitud de antecedentes adicionales durante la aprobación, con reenvío al mismo paso del flujo.
-- Notificaciones in-app y envío de correos para aprobaciones/rechazos.
-- Panel administrativo: usuarios, centros de costo, flujos, auditoría y branding.
-- Branding por empresa: nombre de app, ícono, logo y dominio por defecto para emails de usuarios.
+- Notificaciones in-app y envío de correos vía Resend para aprobaciones/rechazos.
+- **Recuperación de contraseña** vía enlace por correo (token de 30 min, un solo uso).
+- **Verificación en dos pasos (MFA)** por email con código OTP. Activable por usuario y **exigible por empresa** desde el panel admin.
+- **Login empresarial (SSO)** vía Microsoft Entra ID y Google Workspace (OIDC).
+- Panel administrativo: usuarios, centros de costo, flujos, branding, seguridad, OCR/IA, SSO, email y auditoría.
+- **Desactivar/reactivar usuarios** (soft delete): preserva auditoría y rendiciones históricas, libera el email.
+- Branding por empresa: nombre de app, ícono, logo y dominio por defecto.
 - Selector de temas visuales (Executive / Paper / Midnight / Rose).
 - Guía funcional de uso integrada para usuarios desde `Mi Perfil`.
 
@@ -38,9 +35,12 @@ Aplicación web para rendición de gastos empresariales: registro de gastos, an�
 - Base de datos: PostgreSQL.
 - Frontend: Jinja2 + Alpine.js + UnoCSS.
 - Geocodificación: OpenStreetMap Nominatim (reverse geocoding de coordenadas).
-- OCR IA: OpenRouter (SDK `openai`).
-- Exportación: ReportLab (PDF).
+- OCR IA: OpenRouter (cloud) o servidor local OpenAI-compatible (Ollama, LMStudio, vLLM, llama.cpp, LiteLLM).
+- Email: Resend (API REST) con fallback SMTP.
+- SSO: OIDC estándar (Microsoft Entra ID, Google Workspace, Auth0, Okta, etc.).
+- Exportación: ReportLab (PDF), CSV nativo.
 - Procesamiento de primera página PDF para OCR/hash: `pypdfium2`.
+- Validación de uploads: magic bytes (sin librería externa).
 - Infra: Docker + Docker Compose.
 
 ## Requisitos
@@ -226,21 +226,29 @@ Importante:
 ## Roles y perfiles
 
 Roles disponibles:
-- `employee`: crea gastos y rendiciones propias.
-- `manager`: revisa/decide rendiciones según flujo y jerarquía.
+- `employee`: crea gastos y rendiciones propias. Ve solo sus datos.
+- `manager`: revisa/decide rendiciones **según flujo y jerarquía**. Ve sus propias rendiciones + las que tiene pendientes de aprobar en el flujo. No ve todas las de la empresa.
 - `approver` / `reviewer`: participan en pasos definidos por flujo.
-- `admin` / `superadmin`: acceso a administración completa.
+- `admin` / `superadmin`: acceso a administración completa. Ve todas las rendiciones y gastos de la empresa.
 
 Permisos adicionales sobre el usuario:
-- `can_view_approved_reports`: permite ver rendiciones `approved` y `paid` de toda la empresa.
+- `can_view_approved_reports`: permite ver rendiciones `approved` y `paid` de toda la empresa (perfil Finanzas).
 - `can_mark_reimbursements_paid`: permite marcar como `paid` las rendiciones aprobadas de tipo `employee_reimbursement`.
 
 Estos permisos son acumulativos y no reemplazan el rol principal. Un mismo usuario puede, por ejemplo, seguir siendo `manager` y además operar como Finanzas.
 
+**Importante sobre managers**: el rol `manager` NO equivale a admin. Un manager ve:
+- Sus propias rendiciones y gastos.
+- Rendiciones que tiene pendientes de aprobar (según el paso actual del flujo).
+- Si además tiene permisos de finanzas: rendiciones aprobadas/pagadas de la empresa.
+
+Un manager **no** ve: todas las rendiciones de la empresa, dashboard corporativo, ni analytics (salvo que tenga permisos de finanzas).
+
 Vista operativa para Finanzas:
-- `Finanzas -> Todas`: rendiciones visibles para el perfil financiero.
-- `Finanzas -> Pagadas`: rendiciones de devolución ya marcadas como pagadas.
-- `Finanzas -> Tarjeta corporativa`: rendiciones sin devolución al empleado.
+- `Finanzas -> Por pagar`: rendiciones aprobadas pendientes de pago.
+- `Finanzas -> Pagadas`: rendiciones ya marcadas como pagadas.
+- `Finanzas -> Tarjeta corporativa`: rendiciones de tarjeta corporativa aprobadas.
+- `Finanzas -> Todas`: todas las visibles para finanzas.
 
 Acceso administrativo (`/admin`) requiere rol `admin` o `superadmin`.
 
@@ -276,12 +284,16 @@ Notas operativas:
 Ruta: `/admin`.
 
 Módulos principales:
-- `Usuarios`: crear/editar/eliminar, rol, manager, centro de costo.
+- `Usuarios`: crear/editar, rol, manager, centro de costo. **Desactivar/reactivar** (soft delete: preserva datos, libera email, revoca API keys y sesiones MFA).
 - `Permisos de Finanzas`: visibilidad corporativa de rendiciones aprobadas y cierre de devoluciones pagadas.
 - `Centros de costo`: código y presupuesto mensual.
 - `Flujos`: diseño de pipeline de aprobación.
 - `Branding`: nombre app, ícono, logo y dominio por defecto de usuarios.
-- `Auditoría`: historial de acciones.
+- `Notificaciones Email`: configuración de Resend (API key, remitente, eventos a notificar).
+- `OCR / IA`: configuración del proveedor OCR (OpenRouter cloud o servidor local OpenAI-compatible). Incluye prompt editable y botón de prueba.
+- `Seguridad`: forzar verificación en dos pasos (MFA) para todos los usuarios de la empresa.
+- `Login Empresarial (SSO)`: configurar proveedores OIDC (Microsoft Entra ID, Google Workspace). Client secret cifrado.
+- `Auditoría`: historial de acciones (incluye eventos de login SSO).
 
 ## OCR y comportamiento de gastos
 
@@ -354,26 +366,66 @@ Autenticación:
 
 - Bearer JWT vía `Authorization: Bearer <token>`.
 - API Key personal (generada en `Mi Perfil`): `Authorization: Bearer rfk_...`.
-- Las API keys heredan el rol/permisos del usuario que las crea y pueden revocarse desde `Mi Perfil`.
+- Las API keys heredan exactamente el rol/permisos del usuario que las crea.
+- **El acceso a datos vía API es congruente con la web**: un manager ve lo mismo por API que por web.
 
-### Endpoints principales
+### Scoping de datos por rol (web = API)
 
-- `POST /auth/token`: login API (email/password) y entrega token JWT.
+| Recurso | Admin | Finanzas | Manager | Employee |
+|---|---|---|---|---|
+| Gastos (lista/detalle) | Toda la empresa | Propios + aprob/pagados | Propios | Propios |
+| Rendiciones (lista/detalle) | Toda la empresa | Propias + aprob/pagadas | Propias + en revisión | Propias |
+| Analytics / Exports | ✅ | ✅ | ❌ | ❌ |
+| Usuarios / Cost centers | ✅ | ❌ | ❌ | ❌ |
+| Editar/Eliminar gastos | Todos borrador | Propios | Propios | Propios |
+
+### Endpoints completos
+
+**Auth y usuario:**
+- `POST /auth/token`: login API (email/password) → JWT.
 - `GET /me`: datos del usuario autenticado.
+
+**Gastos:**
+- `GET /expenses`: lista (scoping por rol). Paginable con `limit` y `offset`.
+- `POST /expenses`: crea gasto. Acepta imagen/PDF, OCR automático, GPS obligatorio, `category_id` obligatorio.
+- `GET /expenses/{id}`: detalle completo de un gasto.
+- `PUT /expenses/{id}`: editar gasto borrador (parcial: description, merchant, amount, currency, date, category_id, etc.).
+- `DELETE /expenses/{id}`: eliminar gasto borrador.
+- `POST /expenses/analyze`: OCR de comprobante (multipart `receipt`).
+- `GET /expenses/export`: CSV descargable con filtros (admin/finanzas).
+
+**Rendiciones:**
+- `GET /reports`: lista (scoping por rol).
+- `POST /reports`: crea rendición desde `expense_ids`. Acepta `settlement_type`.
+- `GET /reports/{id}`: detalle completo (gastos + decisiones de aprobación).
+- `DELETE /reports/{id}`: eliminar rendición borrador (gastos vuelven a draft).
+- `POST /reports/{id}/submit`: envía al flujo de aprobación.
+- `POST /reports/{id}/approve`: aprueba paso o aprobación final.
+- `POST /reports/{id}/reject`: rechaza con motivo.
+- `POST /reports/{id}/request-info`: solicita antecedentes adicionales.
+- `POST /reports/{id}/mark-paid`: marca como pagada (finanzas).
+- `POST /reports/{id}/remove-expense`: quita gasto de rendición borrador.
+- `GET /reports/{id}/export`: PDF de la rendición.
+- `GET /reports/pending-approvals`: rendiciones pendientes que el usuario puede aprobar.
+
+**Datos maestros (solo admin):**
 - `GET /categories`: categorías activas de la empresa.
-- `POST /expenses/analyze`: analiza una boleta (multipart `receipt`) y devuelve campos OCR.
-- `GET /expenses`: lista gastos (paginable por `limit` y `offset`).
-- `POST /expenses`: crea gasto; acepta imagen/PDF, puede autocompletar con IA y exige `gps_latitude`/`gps_longitude`.
-  También acepta `receipt_time` (`HH:MM` o `HH:MM:SS`).
-  Soporta además `currency`, `exchange_rate`, `expense_type`, `distance_km`, `fuel_price_per_liter`, `vehicle_efficiency_km_l` y `correction_factor`.
-- `GET /reports`: lista rendiciones.
-- `POST /reports`: crea rendición a partir de `expense_ids`.
-  Acepta `settlement_type` con valores `employee_reimbursement` o `corporate_card`.
-- `GET /reports/{id}`: detalle completo (gastos + decisiones).
-- `POST /reports/{id}/submit`: envía rendición al flujo de aprobación.
-- `POST /reports/{id}/approve`: aprueba un paso o aprobación final.
-- `POST /reports/{id}/reject`: rechaza rendición con motivo.
-- `GET /reports/pending-approvals`: mejora recomendada, lista rendiciones pendientes que el usuario actual puede aprobar.
+- `GET /cost-centers`: centros de costo con presupuesto.
+- `GET /users`: usuarios activos (nombre, email, rol, centro de costo).
+
+**Analytics y BI (admin + finanzas):**
+Todos aceptan `?date_from=`, `?date_to=`, `?status=`, `?limit=`.
+- `GET /analytics/summary`: totales globales, counts por estado.
+- `GET /analytics/by-category`: gasto por categoría.
+- `GET /analytics/by-cost-center`: real vs presupuesto.
+- `GET /analytics/by-user`: top gastadores.
+- `GET /analytics/by-month`: tendencia mensual.
+- `GET /analytics/by-status`: rendiciones por estado.
+- `GET /analytics/top-merchants`: top comercios.
+- `GET /analytics/fraud-signals`: score antifraude promedio y distribución.
+
+**Sistema:**
+- `GET /health`: health check.
 
 ### Ejemplos rápidos
 
@@ -385,19 +437,11 @@ curl -X POST http://localhost:5001/api/v1/auth/token \
   -d '{"email":"admin@demo.com","password":"admin123"}'
 ```
 
-1.1. Consumir API con API key de usuario:
+2. Consumir API con API key:
 
 ```bash
 curl -X GET http://localhost:5001/api/v1/me \
   -H "Authorization: Bearer rfk_..."
-```
-
-2. Analizar boleta con IA:
-
-```bash
-curl -X POST http://localhost:5001/api/v1/expenses/analyze \
-  -H "Authorization: Bearer <TOKEN>" \
-  -F "receipt=@/ruta/boleta.jpg"
 ```
 
 3. Crear gasto con imagen (OCR aplicado):
@@ -405,34 +449,76 @@ curl -X POST http://localhost:5001/api/v1/expenses/analyze \
 ```bash
 curl -X POST http://localhost:5001/api/v1/expenses \
   -H "Authorization: Bearer <TOKEN>" \
-  -F "description=Traslado cliente Santiago centro" \
+  -F "description=Traslado cliente" \
   -F "date=2026-03-08" \
-  -F "receipt_time=13:25" \
   -F "gps_latitude=-33.4489" \
   -F "gps_longitude=-70.6693" \
-  -F "gps_accuracy_m=25.0" \
+  -F "category_id=<UUID>" \
   -F "receipt=@/ruta/boleta.jpg"
 ```
 
-`date` soporta `YYYY-MM-DD`, `DD/MM/YYYY` y `DD-MM-YYYY`.
-
-4. Crear rendición:
+4. Editar un gasto (corregir monto):
 
 ```bash
-curl -X POST http://localhost:5001/api/v1/reports \
+curl -X PUT http://localhost:5001/api/v1/expenses/<EXPENSE_ID> \
   -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
-  -d '{"title":"Rendicion Marzo","description":"Semana 1","expense_ids":["<EXPENSE_ID_1>","<EXPENSE_ID_2>"]}'
+  -d '{"amount": 15000}'
 ```
 
-5. Aprobar rendición:
+5. Analytics: gasto por categoría del trimestre:
 
 ```bash
-curl -X POST http://localhost:5001/api/v1/reports/<REPORT_ID>/approve \
-  -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"comment":"Aprobado por jefatura"}'
+curl -X GET "http://localhost:5001/api/v1/analytics/by-category?date_from=2026-07-01&date_to=2026-09-30" \
+  -H "Authorization: Bearer <TOKEN>"
 ```
+
+6. Exportar gastos aprobados en CSV:
+
+```bash
+curl -O -J "http://localhost:5001/api/v1/expenses/export?status=approved&date_from=2026-01-01" \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+## Seguridad y autenticación
+
+### Recuperación de contraseña
+
+- Desde el login, enlace "¿Olvidaste tu contraseña?".
+- Se envía un enlace único por correo (válido 30 min, un solo uso).
+- Anti-enumeración: siempre muestra el mismo mensaje sin importar si el email existe.
+- Token hasheado (SHA-256) en DB; los tokens previos se invalidan al emitir uno nuevo.
+
+### Verificación en dos pasos (MFA por email)
+
+- Cada usuario puede activar MFA desde `Mi Perfil -> Verificación en dos pasos`.
+- Al iniciar sesión, se envía un código de 6 dígitos por correo (válido 10 min, máx. 5 intentos).
+- El admin puede **forzar MFA para toda la empresa** desde `Admin -> Seguridad`.
+- Los usuarios que entran por SSO (OIDC) no pasan por el MFA de la app (el IdP gestiona su propio 2FA).
+- Requiere Resend configurado para el envío de los códigos.
+
+### Login empresarial (SSO vía OIDC)
+
+Ruta: `Admin -> Login Empresarial (SSO)` (`/admin/oidc-providers`).
+
+- Soporta cualquier IdP que cumpla OIDC: **Microsoft Entra ID**, **Google Workspace**, Auth0, Okta, Keycloak, etc.
+- Cada empresa configura sus propios providers (multi-tenant).
+- Validación estricta del `id_token`: firma RS256 con JWKS, `iss`, `aud`, `tid` (tenant para Microsoft).
+- **Sin auto-provisioning**: los usuarios deben existir previamente en rinde. El login SSO no crea cuentas.
+- Anclaje atómico de `oidc_subject` en el primer login (anti race conditions).
+- Auditoría de todos los eventos de login SSO (`login.oidc.ok / .unauthorized / .invalid / .error`).
+- El login local (email/password) sigue disponible como break-glass.
+
+### OCR / IA configurable por empresa
+
+Ruta: `Admin -> OCR / IA` (`/admin/ocr-settings`).
+
+- Selector de proveedor: **OpenRouter (cloud)** o **Local (OpenAI-compatible)**.
+- Para local: soporta Ollama, LMStudio, vLLM, llama.cpp, LiteLLM mediante su API `/v1/chat/completions`.
+- Campos por proveedor: `base_url`, `api_key` (cifrado), `model`, `model_fallback`, `timeout`.
+- **Prompt editable** con defaults inteligentes (uno para cloud, otro más explícito para modelos locales pequeños).
+- Botón "Probar conexión" que envía una imagen sintética y muestra la respuesta del modelo.
+- Backward compatible: si no hay config en la empresa, usa `OPENROUTER_*` del `.env`.
 
 ## Estructura del proyecto
 
@@ -492,3 +578,10 @@ ssh-add ~/.ssh/id_rsa
 - `.env` está excluido del repo.
 - No subas credenciales reales en archivos versionados.
 - Cambia secretos por defecto antes de producción.
+- `SETTINGS_ENCRYPTION_KEY` requerido en producción (cifra API keys de Resend, OCR y OIDC).
+- `SECRET_KEY` requerido en producción (firma sesiones y tokens JWT de estado OIDC).
+- Client secrets de OIDC se guardan cifrados con Fernet en la base de datos.
+- Validación de uploads por magic bytes (no por extensión del filename).
+- Rate limiting en endpoints de auth (login, MFA, forgot-password, OIDC callback).
+- ProxyFix habilitado para correcto manejo de `X-Forwarded-*` detrás de Cloudflare/proxy.
+- Soft delete de usuarios: nunca se elimina un usuario con datos asociados (preserva auditoría).
