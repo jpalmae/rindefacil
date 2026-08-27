@@ -694,8 +694,12 @@ def oidc_callback():
         return redirect(url_for('auth.login'))
 
     # Para usuarios OIDC, no aplicamos must_change_password ni MFA (el IdP gestiona 2FA).
+    # La password local es irrelevante: limpiamos la flag para que el hook de
+    # cambio obligatorio no atasque a usuarios creados para usar solo SSO.
     login_user(user, remember=False)
     user.last_login = datetime.now(timezone.utc)
+    if user.must_change_password:
+        user.must_change_password = False
     db.session.commit()
     _audit_oidc_event(company_id, 'login.oidc.ok', user_id=user.id, description=f"Login exitoso con {provider.name}")
     flash('Sesión iniciada con ' + provider.name + '.', 'success')
