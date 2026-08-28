@@ -233,17 +233,20 @@ def _parse_non_negative_decimal(value):
     return parsed
 
 
-def _normalize_currency(value):
+def _normalize_currency(value, company=None):
     currency = (str(value).strip().upper() if value is not None else ExpenseCurrency.CLP) or ExpenseCurrency.CLP
     if currency not in ExpenseCurrency.CHOICES:
+        return None
+    if company is not None and currency not in company.allowed_expense_currencies:
         return None
     return currency
 
 
-def _compute_amount_clp(amount, currency, exchange_rate):
+def _compute_amount_clp(amount, currency, exchange_rate, base_currency=ExpenseCurrency.CLP):
+    """Monto en moneda base de la empresa (columna histórica amount_clp)."""
     if amount is None:
         return None
-    if currency == ExpenseCurrency.CLP:
+    if currency == base_currency:
         return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if exchange_rate is None or exchange_rate <= 0:
         return None
@@ -737,9 +740,36 @@ def create_token():
     if not email or not password:
         return _error("Debes enviar email y password.", status=400, code="validation_error")
 
-    user = User.query.filter(func.lower(User.email) == email).first()
-    if not user or not user.check_password(password):
+    # Multi-cuenta: el mismo email puede existir en varias empresas.
+    accounts = User.query.filter(func.lower(User.email) == email, User.is_active == True).all()  # noqa: E712
+    matches = [u for u in accounts if u.check_password(password)]
+
+    if not matches:
         return _error("Credenciales invalidas.", status=401, code="invalid_credentials")
+
+    user = matches[0]
+    if len(matches) > 1:
+        company_id = data.get("company_id") or data.get("company")
+        if company_id:
+            wanted = str(company_id)
+            for candidate in matches:
+                if str(candidate.company_id) == wanted:
+                    user = candidate
+                    break
+            else:
+                return _error("company_id no corresponde a ninguna de tus cuentas.", status=403, code="forbidden")
+        else:
+            return _error(
+                "Tienes cuentas en varias empresas. Reintenta incluyendo company_id.",
+                status=409,
+                code="company_required",
+                details={
+                    "accounts": [
+                        {"company_id": str(u.company_id), "company_name": u.company.name}
+                        for u in matches
+                    ]
+                },
+            )
 
     if not user.is_active:
         return _error("Usuario inactivo.", status=403, code="inactive_user")
@@ -883,7 +913,7 @@ def expenses_create():
 
     analyze_receipt = str(data.get("analyze_receipt", "true")).lower() in {"1", "true", "yes", "on"}
 
-    currency = _normalize_currency(data.get("currency"))
+    currency = _normalize_currency(data.get("currency"), user.company)
     amount = _parse_amount(data.get("amount"), currency=currency)
     exchange_rate = _parse_non_negative_decimal(data.get("exchange_rate"))
     merchant = (data.get("merchant") or "").strip() or None
@@ -936,8 +966,14 @@ def expenses_create():
     if amount is None or amount <= 0:
         return _error("Monto invalido. Envia 'amount' o una boleta legible para OCR.", status=422, code="validation_error")
 
+    base_currency = (user.company.base_currency or ExpenseCurrency.CLP)
+
     if currency is None:
-        return _error("Debes enviar una currency valida (CLP o USD).", status=422, code="validation_error")
+        return _error(
+            f"Debes enviar una currency valida ({base_currency} o USD).",
+            status=422,
+            code="validation_error",
+        )
 
     if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
         return _error(
@@ -946,12 +982,12 @@ def expenses_create():
             code="validation_error",
         )
 
-    if currency == ExpenseCurrency.CLP:
+    if currency == base_currency:
         exchange_rate = Decimal("1")
 
-    amount_clp = _compute_amount_clp(amount, currency, exchange_rate)
+    amount_clp = _compute_amount_clp(amount, currency, exchange_rate, base_currency=base_currency)
     if amount_clp is None or amount_clp <= 0:
-        return _error("No fue posible calcular el monto en CLP.", status=422, code="validation_error")
+        return _error(f"No fue posible calcular el monto en {base_currency}.", status=422, code="validation_error")
 
     if not date_value:
         return _error("Fecha invalida. Usa formato YYYY-MM-DD.", status=422, code="validation_error")
@@ -995,6 +1031,7 @@ def expenses_create():
         rendered_at=gps_captured_at,
         receipt_time=receipt_time,
         time_tolerance_minutes=20,
+        tz_name=user.company.timezone,
     )
 
     if category_id is not None:
@@ -1747,8 +1784,9 @@ def expense_update(expense_id):
         changes["merchant"] = True
 
     if "amount" in data or "currency" in data:
+        base_currency = user.company.base_currency or ExpenseCurrency.CLP
         currency = data.get("currency")
-        if currency and currency in {ExpenseCurrency.CLP, ExpenseCurrency.USD}:
+        if currency and currency in user.company.allowed_expense_currencies:
             expense.currency = currency
             changes["currency"] = True
         else:
@@ -1762,16 +1800,16 @@ def expense_update(expense_id):
             expense.amount = amount
             changes["amount"] = True
 
-            if currency == ExpenseCurrency.USD:
+            if currency == base_currency:
+                expense.exchange_rate = None
+                expense.amount_clp = amount
+            else:
                 exchange_rate = _parse_amount(data.get("exchange_rate")) if data.get("exchange_rate") else expense.exchange_rate
                 if exchange_rate and exchange_rate > 0:
                     expense.exchange_rate = exchange_rate
                     changes["exchange_rate"] = True
-                amount_clp = (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if exchange_rate else None
-                expense.amount_clp = amount_clp or amount
-            else:
-                expense.exchange_rate = None
-                expense.amount_clp = amount
+                amount_base = (amount * exchange_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if exchange_rate else None
+                expense.amount_clp = amount_base or amount
 
     if "date" in data:
         date_str = (data.get("date") or "").strip()

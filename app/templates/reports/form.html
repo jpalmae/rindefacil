@@ -107,9 +107,9 @@
                                     <div class="text-lg font-black text-gray-900 text-right">
                                         {% if expense.currency == 'USD' %}
                                         USD {{ "{:,.2f}".format(expense.amount) }}
-                                        <div class="text-[10px] font-medium text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                                        <div class="text-[10px] font-medium text-gray-500 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(expense.amount_clp) }}</div>
                                         {% else %}
-                                        ${{ "{:,.0f}".format(expense.amount) }}
+                                        {{ currency_symbol }}{{ "{:,.0f}".format(expense.amount) }}
                                         {% endif %}
                                     </div>
                                 </div>

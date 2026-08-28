@@ -43,12 +43,12 @@
                         </div>
                         <div x-show="expenseType === 'mileage'" x-cloak class="rounded-xl border border-primary/15 bg-white px-4 py-3 text-left">
                             <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Moneda base</p>
-                            <p class="mt-1 text-sm font-semibold text-gray-900">CLP calculado automáticamente</p>
+                            <p class="mt-1 text-sm font-semibold text-gray-900">{{ base_currency }} calculado automáticamente</p>
                             <p class="mt-1 text-xs text-gray-500">Cada tramo se guarda como gasto individual y se suma normalmente en la rendición.</p>
                         </div>
                     </div>
                     <div class="flex items-center justify-center text-4xl font-black text-gray-900 min-w-0">
-                        <span class="text-gray-400 mr-2" x-text="expenseType === 'mileage' ? '$' : currencySymbol()"></span>
+                        <span class="text-gray-400 mr-2" x-text="currencySymbol()"></span>
                         <input type="number" step="0.01" name="amount" id="amount"
                             x-model="amountValue"
                             :readonly="expenseType === 'mileage'"
@@ -57,7 +57,7 @@
                             placeholder="0.00" required autofocus>
                     </div>
                     <p class="mt-3 text-sm text-gray-500" x-show="expenseType === 'receipt' && currency === 'USD'">
-                        Equivalente CLP:
+                        Equivalente {{ base_currency }}:
                         <span class="font-bold text-gray-900" x-text="formattedClpAmount()"></span>
                     </p>
                     <div x-show="expenseType === 'mileage'" x-cloak class="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
@@ -200,7 +200,7 @@
                     </div>
 
                     <div x-show="expenseType === 'receipt' && currency === 'USD'" x-cloak>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Cambio (CLP por USD)</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Tipo de Cambio ({{ base_currency }} por USD)</label>
                         <input type="number" step="0.0001" min="0" name="exchange_rate" id="exchange_rate"
                             x-model="exchangeRate" class="input text-gray-900"
                             placeholder="Ej. 950.25">
@@ -293,6 +293,9 @@
         const defaultFuelPrice = '{{ mileage_defaults.fuel_price_per_liter }}';
         const defaultEfficiency = '{{ mileage_defaults.vehicle_efficiency_km_l }}';
         const defaultCorrection = '{{ mileage_defaults.correction_factor }}';
+        const baseCurrency = '{{ base_currency }}';
+        const baseSymbol = '{{ base_currency_symbol }}';
+        const currencySymbols = { 'USD': 'USD', 'CLP': '$', 'PEN': 'S/' };
         const initialExpense = initialData || {};
 
         return {
@@ -302,7 +305,7 @@
             imagePreviewUrl: initialExpense.receiptUrl || null,
             selectedFile: null,
             expenseType: initialExpense.expenseType || defaultExpenseType,
-            currency: initialExpense.currency || 'CLP',
+            currency: initialExpense.currency || baseCurrency,
             exchangeRate: initialExpense.exchangeRate || '',
             amountValue: initialExpense.amount || '',
             distanceKm: initialExpense.distanceKm || '',
@@ -333,7 +336,8 @@
             },
 
             currencySymbol() {
-                return this.currency === 'USD' ? 'USD' : '$';
+                if (this.currency === 'USD') return 'USD';
+                return currencySymbols[this.currency] || baseSymbol;
             },
 
             amountAsNumber() {
@@ -368,7 +372,8 @@
 
             formattedClpAmount() {
                 const total = this.amountAsNumber() * this.exchangeRateAsNumber();
-                return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(total || 0);
+                const locale = baseCurrency === 'PEN' ? 'es-PE' : 'es-CL';
+                return new Intl.NumberFormat(locale, { style: 'currency', currency: baseCurrency, maximumFractionDigits: baseCurrency === 'PEN' ? 2 : 0 }).format(total || 0);
             },
 
             mileageAdjustedKm() {
@@ -462,7 +467,7 @@
 
             handleExpenseTypeChange() {
                 if (this.expenseType === 'mileage') {
-                    this.currency = 'CLP';
+                    this.currency = baseCurrency;
                     this.exchangeRate = '';
                     this.exchangeRateSource = '';
                     this.exchangeRateMessage = '';
@@ -703,7 +708,7 @@
                         document.getElementById('amount').value = result.amount;
                         updatedFields += 1;
                     }
-                    if (result.currency && this.expenseType !== 'mileage' && ['CLP', 'USD'].includes(String(result.currency).toUpperCase())) {
+                    if (result.currency && this.expenseType !== 'mileage' && Object.keys({{ currency_options|tojson }}).includes(String(result.currency).toUpperCase())) {
                         this.currency = String(result.currency).toUpperCase();
                         document.getElementById('currency').value = this.currency;
                         this.handleCurrencyChange();

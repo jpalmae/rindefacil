@@ -16,7 +16,7 @@ OCR_DEFAULT_TIMEOUT_SECONDS = 60
 
 DEFAULT_CLOUD_PROMPT = """Eres un asistente de contabilidad experto. Extrae la información de este recibo comercial.
 Devuelve ÚNICAMENTE un objeto JSON válido con las siguientes claves:
-- "amount": Número con el total pagado. Si el comprobante está en CLP, devuelve el monto sin símbolos, sin puntos y sin comas de miles. Ej: 12990. Usa punto SOLO si hay decimales reales en monedas extranjeras. Ej: 2500 o 2500.75
+- "amount": Número con el total pagado. Si el comprobante está en CLP, devuelve el monto sin símbolos, sin puntos y sin comas de miles. Ej: 12990. Si está en soles peruanos (S/), usa punto decimal y quita comas de miles. Ej: "S/ 1,250.50" → 1250.50. Usa punto SOLO si hay decimales reales en monedas extranjeras. Ej: 2500 o 2500.75
 - "merchant": Nombre comercial del proveedor o comercio (si no hay, devuelve null).
 - "date": Fecha del gasto en formato DD/MM/YYYY (si no hay, devuelve null).
 - "time": Hora del comprobante en formato HH:MM (24h). Si no está visible, devuelve null.
@@ -34,7 +34,7 @@ Formato requerido:
 }
 
 Reglas estrictas:
-- "amount" es el total pagado en números, sin símbolos ni separadores de miles. Ejemplos: 1990, 1990.50, 50.
+- "amount" es el total pagado en números, sin símbolos ni separadores de miles. Si el monto está en pesos chilenos, es un número entero. Ejemplos: 1990, 50. Si está en soles peruanos (S/), respeta los decimales con punto. Ejemplo: "S/ 1,250.50" → 1250.50.
 - Si un campo no aparece visible en la imagen, devuelve null (no lo inventes).
 - "category" debe ser exactamente una de las opciones listadas.
 - Responde con el JSON únicamente. Nada antes ni después."""

@@ -15,7 +15,7 @@ from app.models.category import Category
 from app.models.expense import Expense, ExpenseCurrency, ExpenseStatus, ExpenseType
 from app.models.report import ReportStatus
 from app.services.audit_service import log_action
-from app.services.exchange_rate_service import get_usd_exchange_rate_for_date
+from app.services.exchange_rate_service import get_usd_exchange_rate_for_date, get_usd_rate_for_base
 from app.services.location_service import evaluate_expense_integrity, reverse_geocode
 from app.services.ocr_service import calculate_receipt_hash, extract_expense_data
 
@@ -166,9 +166,11 @@ def _parse_non_negative_decimal(value):
     return parsed
 
 
-def _normalize_currency(value):
+def _normalize_currency(value, company=None):
     currency = (str(value).strip().upper() if value is not None else ExpenseCurrency.CLP) or ExpenseCurrency.CLP
     if currency not in ExpenseCurrency.CHOICES:
+        return None
+    if company is not None and currency not in company.allowed_expense_currencies:
         return None
     return currency
 
@@ -180,10 +182,11 @@ def _normalize_expense_type(value):
     return expense_type
 
 
-def _compute_amount_clp(amount, currency, exchange_rate):
+def _compute_amount_clp(amount, currency, exchange_rate, base_currency=ExpenseCurrency.CLP):
+    """Monto en moneda base de la empresa (columna histórica amount_clp)."""
     if amount is None:
         return None
-    if currency == ExpenseCurrency.CLP:
+    if currency == base_currency:
         return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     if exchange_rate is None or exchange_rate <= 0:
         return None
@@ -292,10 +295,14 @@ def _expense_form_context(expense=None):
             'gpsAddress': expense.gps_address or '',
         }
 
+    company = current_user.company
+    allowed = company.allowed_expense_currencies
     return {
         'categories': Category.query.filter_by(company_id=current_user.company_id).all(),
-        'currency_options': ExpenseCurrency.CHOICES,
-        'default_currency': (expense.currency if expense else ExpenseCurrency.CLP),
+        'currency_options': {c: ExpenseCurrency.CHOICES[c] for c in allowed if c in ExpenseCurrency.CHOICES},
+        'default_currency': (expense.currency if expense else (company.base_currency or ExpenseCurrency.CLP)),
+        'base_currency': company.base_currency or ExpenseCurrency.CLP,
+        'base_currency_symbol': company.currency_symbol,
         'expense_type_options': {
             ExpenseType.RECEIPT: ExpenseType.LABELS[ExpenseType.RECEIPT],
             ExpenseType.MILEAGE: ExpenseType.LABELS[ExpenseType.MILEAGE],
@@ -327,7 +334,7 @@ def _upsert_expense(expense=None):
 
     expense_type = _normalize_expense_type(request.form.get('expense_type'))
     amount_raw = request.form.get('amount')
-    currency = _normalize_currency(request.form.get('currency'))
+    currency = _normalize_currency(request.form.get('currency'), current_user.company)
     amount = _parse_amount(amount_raw, currency=currency)
     exchange_rate = _parse_non_negative_decimal(request.form.get('exchange_rate'))
     merchant = (request.form.get('merchant') or '').strip() or None
@@ -386,7 +393,7 @@ def _upsert_expense(expense=None):
         if amount is None or amount <= 0:
             flash('Debes ingresar kilómetros, precio litro, rendimiento y factor de corrección válidos para vehículo particular.', 'danger')
             return redirect(redirect_endpoint)
-        currency = ExpenseCurrency.CLP
+        currency = current_user.company.base_currency or ExpenseCurrency.CLP
         exchange_rate = Decimal('1')
     else:
         if amount is None or amount <= 0:
@@ -394,22 +401,23 @@ def _upsert_expense(expense=None):
             return redirect(redirect_endpoint)
 
         if currency is None:
-            flash('La moneda seleccionada no es válida.', 'danger')
+            flash('La moneda seleccionada no es válida para tu empresa.', 'danger')
             return redirect(redirect_endpoint)
 
-        if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
-            auto_rate = get_usd_exchange_rate_for_date(auto_rate_date) if auto_rate_date else None
+        base_currency = current_user.company.base_currency or ExpenseCurrency.CLP
+        if currency != base_currency and (exchange_rate is None or exchange_rate <= 0):
+            auto_rate = get_usd_rate_for_base(auto_rate_date, base_currency) if auto_rate_date else None
             exchange_rate = auto_rate['exchange_rate'] if auto_rate else None
             if exchange_rate is None or exchange_rate <= 0:
                 flash('Debes ingresar un tipo de cambio válido para gastos en USD.', 'danger')
                 return redirect(redirect_endpoint)
 
-        if currency == ExpenseCurrency.CLP:
+        if currency == base_currency:
             exchange_rate = Decimal('1')
 
-    amount_clp = _compute_amount_clp(amount, currency, exchange_rate)
+    amount_clp = _compute_amount_clp(amount, currency, exchange_rate, base_currency=(current_user.company.base_currency or ExpenseCurrency.CLP))
     if amount_clp is None or amount_clp <= 0:
-        flash('No fue posible calcular el monto en CLP para este gasto.', 'danger')
+        flash('No fue posible calcular el monto en la moneda base para este gasto.', 'danger')
         return redirect(redirect_endpoint)
 
     try:
@@ -430,6 +438,7 @@ def _upsert_expense(expense=None):
             rendered_at=gps_captured_at,
             receipt_time=receipt_time,
             time_tolerance_minutes=20,
+            tz_name=current_user.company.timezone,
         )
 
         if expense is None:
@@ -720,7 +729,9 @@ def reverse_geocode_lookup():
 @expenses_bp.route('/exchange-rate', methods=['GET'])
 @login_required
 def exchange_rate_lookup():
-    currency = _normalize_currency(request.args.get('currency'))
+    company = current_user.company
+    base_currency = company.base_currency or ExpenseCurrency.CLP
+    currency = _normalize_currency(request.args.get('currency'), company)
     date_raw = request.args.get('date')
     if currency != ExpenseCurrency.USD:
         return jsonify({'exchange_rate': '1', 'source': 'manual', 'date': date_raw}), 200
@@ -733,7 +744,7 @@ def exchange_rate_lookup():
     except ValueError:
         return jsonify({'error': 'Fecha inválida. Usa YYYY-MM-DD.'}), 400
 
-    result = get_usd_exchange_rate_for_date(target_date)
+    result = get_usd_rate_for_base(target_date, base_currency)
     if not result:
         return jsonify({'error': 'No fue posible obtener el tipo de cambio automático para esa fecha.'}), 404
 

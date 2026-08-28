@@ -204,7 +204,7 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 border-l-4 border-primary">
             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto (CLP)</p>
-            <p class="text-2xl font-black text-primary mt-1">${{ "{:,.0f}".format(report.total_amount) }}</p>
+            <p class="text-2xl font-black text-primary mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(report.total_amount) }}</p>
         </div>
         <div class="card p-4">
             <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Tipo</p>
@@ -315,9 +315,9 @@
                             <div class="text-lg font-black text-gray-900 mr-auto lg:mr-0">
                                 {% if expense.currency == 'USD' %}
                                 USD {{ "{:,.2f}".format(expense.amount) }}
-                                <div class="text-[10px] font-medium text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                                <div class="text-[10px] font-medium text-gray-500 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(expense.amount_clp) }}</div>
                                 {% else %}
-                                ${{ "{:,.0f}".format(expense.amount) }}
+                                {{ currency_symbol }}{{ "{:,.0f}".format(expense.amount) }}
                                 {% endif %}
                             </div>
                             <button type="button" @click="open = !open"
@@ -381,7 +381,7 @@
                             <div class="rounded-xl bg-gray-50/70 border border-gray-100 p-4">
                                 <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400">Parámetros de cálculo</p>
                                 <p class="mt-2 text-sm text-gray-900">
-                                    Litro ${{ "{:,.0f}".format(expense.fuel_price_per_liter or 0) }}
+                                    Litro {{ currency_symbol }}{{ "{:,.0f}".format(expense.fuel_price_per_liter or 0) }}
                                     · Rendimiento {{ "{:,.2f}".format(expense.vehicle_efficiency_km_l or 0) }} km/l
                                     · Factor {{ expense.correction_factor or 0 }}
                                 </p>

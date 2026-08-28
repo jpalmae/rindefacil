@@ -1,7 +1,29 @@
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
+from zoneinfo import ZoneInfo
 import uuid
 from app.extensions import db
+
+BASE_CURRENCY_CHOICES = {
+    'CLP': 'Peso chileno (CLP)',
+    'PEN': 'Sol peruano (PEN)',
+}
+
+CURRENCY_SYMBOLS = {
+    'CLP': '$',
+    'PEN': 'S/',
+    'USD': 'US$',
+}
+
+COMMON_TIMEZONES = [
+    'America/Santiago',
+    'America/Lima',
+    'America/Bogota',
+    'America/Mexico_City',
+    'America/Argentina/Buenos_Aires',
+    'America/Sao_Paulo',
+    'UTC',
+]
 
 class Company(db.Model):
     __tablename__ = 'companies'
@@ -11,6 +33,8 @@ class Company(db.Model):
     rut = db.Column(db.String(12))
     plan = db.Column(db.String(50), default='basic')
     settings = db.Column(JSONB, default=lambda: {})
+    timezone = db.Column(db.String(64), nullable=False, default='America/Santiago', server_default='America/Santiago')
+    base_currency = db.Column(db.String(3), nullable=False, default='CLP', server_default='CLP')
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
 
     # Relaciones
@@ -23,6 +47,26 @@ class Company(db.Model):
     def __repr__(self):
         return f'<Company {self.name}>'
 
+    @property
+    def py_timezone(self):
+        """ZoneInfo de la empresa, con fallback seguro a Santiago."""
+        from zoneinfo import ZoneInfo as _ZI
+        try:
+            return _ZI(self.timezone or 'America/Santiago')
+        except Exception:
+            return _ZI('America/Santiago')
+
+    @property
+    def allowed_expense_currencies(self):
+        """Monedas de gasto permitidas para la empresa: base + USD."""
+        base = self.base_currency or 'CLP'
+        if base == 'USD':
+            return ['USD']
+        return [base, 'USD']
+
+    @property
+    def currency_symbol(self):
+        return CURRENCY_SYMBOLS.get(self.base_currency, '$')
     @property
     def domain_label(self):
         """Etiqueta corta derivada del dominio de branding (sin TLD),

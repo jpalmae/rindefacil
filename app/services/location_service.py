@@ -130,6 +130,7 @@ def evaluate_expense_integrity(
     rendered_at=None,
     receipt_time=None,
     time_tolerance_minutes=20,
+    tz_name=None,
 ):
     """
     Combined anti-fraud score:
@@ -147,7 +148,7 @@ def evaluate_expense_integrity(
     if rendered_at:
         if rendered_at.tzinfo is None:
             rendered_at = rendered_at.replace(tzinfo=timezone.utc)
-        rendered_local = rendered_at.astimezone(_app_timezone())
+        rendered_local = rendered_at.astimezone(_app_timezone(tz_name))
 
     date_component = {"name": "date", "score": 0.0, "weight": 0.3, "status": "unknown", "days_diff": None}
     if receipt_date and rendered_local:
@@ -166,7 +167,7 @@ def evaluate_expense_integrity(
 
     time_component = {"name": "time", "score": 0.0, "weight": 0.2, "status": "unknown", "minutes_diff": None}
     if receipt_time and receipt_date and rendered_local:
-        receipt_local = datetime.combine(receipt_date, receipt_time, tzinfo=_app_timezone())
+        receipt_local = datetime.combine(receipt_date, receipt_time, tzinfo=_app_timezone(tz_name))
         minutes_diff = abs((rendered_local - receipt_local).total_seconds()) / 60
         time_component["minutes_diff"] = round(minutes_diff, 1)
         if minutes_diff <= time_tolerance_minutes:
@@ -316,9 +317,14 @@ def _evaluate_business_hours_component(receipt_date, receipt_time, rendered_loca
     return component
 
 
-def _app_timezone():
-    tz_name = current_app.config.get("APP_TIMEZONE", "America/Santiago")
+def _app_timezone(tz_name=None):
+    """Timezone de evaluación. Prioridad: tz explícita (empresa del gasto) >
+    APP_TIMEZONE config > America/Santiago."""
+    resolved = tz_name or current_app.config.get("APP_TIMEZONE", "America/Santiago")
     try:
-        return ZoneInfo(tz_name)
+        return ZoneInfo(resolved)
     except Exception:
-        return timezone.utc
+        try:
+            return ZoneInfo("America/Santiago")
+        except Exception:
+            return timezone.utc

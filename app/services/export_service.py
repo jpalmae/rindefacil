@@ -103,26 +103,37 @@ def generate_report_pdf(report):
     Story.append(Paragraph(f"<b>Fecha de Solicitud:</b> {report.created_at.strftime('%d/%m/%Y')}", styles['Normal']))
     Story.append(Paragraph(f"<b>Estado:</b> {_report_status_label(report)}", styles['Normal']))
     Story.append(Paragraph(f"<b>Tipo:</b> {report.settlement_type_label}", styles['Normal']))
-    Story.append(Paragraph(f"<b>Monto Total (CLP):</b> ${report.total_amount:,.0f} {report.currency}", styles['Normal']))
+
+    base_currency = (report.company.base_currency if report.company else None) or 'CLP'
+    base_symbol = {'CLP': '$', 'PEN': 'S/', 'USD': 'US$'}.get(base_currency, '$')
+    decimals = 2 if base_currency == 'PEN' else 0
+    Story.append(Paragraph(f"<b>Monto Total ({base_currency}):</b> {base_symbol}{report.total_amount:,.{decimals}f} {report.currency}", styles['Normal']))
     Story.append(Spacer(1, 20))
-    
+
     # Table Header
     data = [['Fecha', 'Comercio', 'Categoría', 'Monto']]
-    
+
     # Table Data
     for exp in report.expenses.order_by('date').all():
         cat_name = exp.category.name if exp.category else 'N/A'
         merchant = exp.merchant or ('Vehículo particular' if exp.is_mileage else 'S/N')
         if exp.is_mileage and exp.distance_km is not None:
             merchant = f"{merchant} ({exp.distance_km:,.2f} km)"
+        exp_decimals = 2 if exp.currency in ('USD', 'PEN') else 0
+        exp_symbol = {'CLP': '$', 'PEN': 'S/', 'USD': 'US$'}.get(exp.currency, '$')
+        amount_text = (
+            f"USD {exp.amount:,.2f} ({base_currency} {base_symbol}{exp.amount_clp:,.{decimals}f})"
+            if exp.currency == 'USD'
+            else f"{exp_symbol}{exp.amount:,.{exp_decimals}f}"
+        )
         data.append([
             exp.date.strftime('%d/%m/%Y'),
             merchant,
             cat_name,
-            f"USD {exp.amount:,.2f} (CLP ${exp.amount_clp:,.0f})" if exp.currency == 'USD' else f"${exp.amount:,.0f}"
+            amount_text
         ])
-        
-    data.append(['', '', 'TOTAL CLP:', f"${report.total_amount:,.0f}"])
+
+    data.append(['', '', f'TOTAL {base_currency}:', f"{base_symbol}{report.total_amount:,.{decimals}f}"])
     
     # Stylize Table
     t = Table(data, colWidths=[80, 200, 150, 80])

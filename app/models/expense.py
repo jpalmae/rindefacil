@@ -27,10 +27,12 @@ class ExpenseType:
 class ExpenseCurrency:
     CLP = 'CLP'
     USD = 'USD'
+    PEN = 'PEN'
 
     CHOICES = {
         CLP: 'Peso chileno (CLP)',
         USD: 'USD Dollar',
+        PEN: 'Sol peruano (PEN)',
     }
 
 class Expense(db.Model):
@@ -93,7 +95,9 @@ class Expense(db.Model):
 
     @property
     def is_foreign_currency(self):
-        return (self.currency or ExpenseCurrency.CLP) != ExpenseCurrency.CLP
+        # USD es la única moneda convertible (requiere tipo de cambio hacia
+        # la moneda base de la empresa). CLP/PEN son monedas base locales.
+        return (self.currency or ExpenseCurrency.CLP) == ExpenseCurrency.USD
 
     @property
     def is_mileage(self):

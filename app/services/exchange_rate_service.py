@@ -1,5 +1,5 @@
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 import requests
 from flask import current_app
@@ -7,6 +7,7 @@ from flask import current_app
 
 MINDFICADOR_BASE_URL = "https://mindicador.cl/api"
 CMF_DOLLAR_URL = "https://api.sbif.cl/api-sbifv3/recursos_api/dolar/{year}/{month}/dias/{day}"
+OPEN_ER_API_URL = "https://open.er-api.com/v6/latest/USD"
 
 
 def _parse_decimal(value):
@@ -128,3 +129,72 @@ def get_usd_exchange_rate_for_date(target_date):
             break
 
     return None
+
+
+def _open_er_api_rate(symbol):
+    """USD → symbol vía open.er-api.com (sin API key). Tasa del día."""
+    response = requests.get(
+        OPEN_ER_API_URL,
+        params={"symbols": symbol},
+        timeout=8,
+        headers={"Accept": "application/json"},
+    )
+    response.raise_for_status()
+    payload = response.json() or {}
+    if payload.get("result") != "success":
+        return None
+
+    value = _parse_decimal((payload.get("rates") or {}).get(symbol))
+    if value is None or value <= 0:
+        return None
+
+    return {
+        "exchange_rate": value,
+        "source": "open.er-api.com",
+        "source_detail": f"open.er-api.com (USD/{symbol})",
+        "date": date.today(),
+    }
+
+
+def get_usd_rate_for_base(target_date, base_currency):
+    """Tasa USD → moneda base de la empresa.
+
+    CLP: cadena mindicador → CMF (histórica).
+    PEN: open.er-api.com (del día; fallback manual en la UI).
+    """
+    base = (base_currency or "CLP").upper()
+    if base == "PEN":
+        try:
+            return _open_er_api_rate("PEN")
+        except Exception as exc:
+            current_app.logger.warning("open.er-api PEN lookup failed: %s", exc)
+            return None
+    if base == "CLP":
+        return get_usd_exchange_rate_for_date(target_date)
+    return None
+
+
+def resolve_amount_in_base(company, currency, amount, provided_rate=None, rate_date=None):
+    """Convierte `amount` en `currency` a la moneda base de la empresa.
+
+    Devuelve (amount_base, exchange_rate_usada). La tasa es None cuando la
+    moneda del gasto ES la base (tasa implícita 1). Devuelve (None, None)
+    si no se puede resolver (falta tasa válida).
+    """
+    if amount is None:
+        return None, None
+
+    base = (company.base_currency or "CLP").upper()
+    if (currency or base) == base:
+        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), None
+
+    rate = provided_rate
+    if rate is None or rate <= 0:
+        target_date = rate_date or date.today()
+        auto = get_usd_rate_for_base(target_date, base)
+        rate = auto["exchange_rate"] if auto else None
+
+    if rate is None or rate <= 0:
+        return None, None
+
+    return (amount * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), rate

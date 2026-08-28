@@ -13,12 +13,12 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div class="card bg-white border-l-4 border-gray-400">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Pdte. Rendir</h3>
-            <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_draft) }}</p>
+            <p class="text-3xl font-black text-gray-900 mt-2">{{ currency_symbol }}{{ "{:,.0f}".format(total_draft) }}</p>
             <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
         </div>
         <div class="card bg-white border-l-4 border-success">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Aprobados Mes</h3>
-            <p class="text-3xl font-black text-gray-900 mt-2">${{ "{:,.0f}".format(total_approved) }}</p>
+            <p class="text-3xl font-black text-gray-900 mt-2">{{ currency_symbol }}{{ "{:,.0f}".format(total_approved) }}</p>
             <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
         </div>
         <div
@@ -105,9 +105,9 @@
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                             {% if expense.currency == 'USD' %}
                             USD {{ "{:,.2f}".format(expense.amount) }}
-                            <div class="text-[10px] text-gray-500 mt-1">CLP ${{ "{:,.0f}".format(expense.amount_clp) }}</div>
+                            <div class="text-[10px] text-gray-500 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(expense.amount_clp) }}</div>
                             {% else %}
-                            ${{ "{:,.0f}".format(expense.amount) }} {{ expense.currency }}
+                            {{ currency_symbol }}{{ "{:,.0f}".format(expense.amount) }} {{ expense.currency }}
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">

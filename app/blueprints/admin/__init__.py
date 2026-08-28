@@ -132,7 +132,12 @@ def user_new():
         if '@' not in email:
             flash('Debes ingresar un email válido o configurar dominio por defecto.', 'danger')
             return redirect(url_for('admin.user_new'))
-        
+
+        # Email único POR EMPRESA: puede existir en otra empresa, no en esta.
+        if User.query.filter_by(company_id=current_user.company_id, email=email).first():
+            flash(f'Ya existe un usuario con el email {email} en esta empresa.', 'warning')
+            return redirect(url_for('admin.user_new'))
+
         user = User(
             company_id=current_user.company_id,
             full_name=full_name,
@@ -461,6 +466,36 @@ def branding():
         if brand_theme not in allowed_themes:
             brand_theme = 'executive'
 
+        # Timezone de la empresa (antifraude evalúa en hora local).
+        from zoneinfo import ZoneInfo
+        from app.models.company import COMMON_TIMEZONES
+        tz_value = (request.form.get('timezone') or 'America/Santiago').strip()
+        try:
+            ZoneInfo(tz_value)
+        except Exception:
+            tz_value = 'America/Santiago'
+        if tz_value not in COMMON_TIMEZONES:
+            # Aceptamos cualquier zona válida aunque no esté en la lista corta.
+            pass
+        company.timezone = tz_value
+
+        # Moneda base de la empresa (contabilidad). Bloqueada si ya hay gastos.
+        from app.models.company import BASE_CURRENCY_CHOICES
+        from app.models.expense import Expense
+        base_currency_value = (request.form.get('base_currency') or 'CLP').strip().upper()
+        if base_currency_value not in BASE_CURRENCY_CHOICES:
+            base_currency_value = 'CLP'
+        if base_currency_value != (company.base_currency or 'CLP'):
+            has_expenses = db.session.query(Expense.id).filter_by(company_id=company.id).limit(1).first() is not None
+            if has_expenses:
+                flash(
+                    'No se puede cambiar la moneda base: la empresa ya tiene gastos registrados en '
+                    f'{company.base_currency}. Contacta al administrador del sistema.',
+                    'danger',
+                )
+                return redirect(url_for('admin.branding'))
+        company.base_currency = base_currency_value
+
         settings['brand_app_name'] = app_name
         settings['brand_user_default_domain'] = default_domain
         settings['brand_app_url'] = app_url or ''
@@ -509,10 +544,13 @@ def branding():
         flash('Branding actualizado correctamente.', 'success')
         return redirect(url_for('admin.branding'))
 
+    from app.models.company import COMMON_TIMEZONES, BASE_CURRENCY_CHOICES
     return render_template(
         'admin/branding.html',
         company=company,
         branding=settings,
+        timezone_choices=COMMON_TIMEZONES,
+        base_currency_choices=BASE_CURRENCY_CHOICES,
     )
 
 
