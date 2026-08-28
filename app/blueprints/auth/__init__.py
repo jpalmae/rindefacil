@@ -81,6 +81,38 @@ def enforce_temporary_password_change():
     return redirect(url_for('auth.force_password_change'))
 
 
+def _complete_login(user, remember, force_change_on_success):
+    """Post-match de credenciales: MFA si aplica, login_user y redirect."""
+    if not user.is_active:
+        flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    if user.is_mfa_required and user.auth_source != 'oidc':
+        _invalidate_user_mfa_codes(user, MFA_CODE_PURPOSE_LOGIN)
+        code, raw_code = MfaCode.build_for_user(user, MFA_CODE_PURPOSE_LOGIN)
+        db.session.add(code)
+        db.session.commit()
+        send_mfa_code_email(user, user.company, raw_code, purpose=MFA_CODE_PURPOSE_LOGIN)
+        session['mfa_user_id'] = str(user.id)
+        session['mfa_remember'] = remember
+        session['mfa_force_password_change'] = force_change_on_success
+        flash('Enviamos un código de verificación a tu correo.', 'info')
+        return redirect(url_for('auth.mfa_verify'))
+
+    login_user(user, remember=remember)
+    user.last_login = datetime.now(timezone.utc)
+    if force_change_on_success:
+        user.must_change_password = True
+        db.session.commit()
+        flash('Debes cambiar tu contraseña temporal antes de continuar.', 'warning')
+        return redirect(url_for('auth.force_password_change'))
+
+    db.session.commit()
+    flash(f'Sesión iniciada en {user.company.name}.', 'success')
+    next_page = request.args.get('next')
+    return redirect(next_page or url_for('dashboard.index'))
+
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
 @limiter.limit('10/minute;30/hour')
 def login():
@@ -88,50 +120,59 @@ def login():
         return redirect(url_for('dashboard.index'))
 
     if request.method == 'POST':
-        email = request.form.get('email')
+        email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password')
         remember = request.form.get('remember', False) == 'on'
 
-        user = User.query.filter_by(email=email).first()
+        # Multi-cuenta: el mismo email puede existir en varias empresas.
+        accounts = User.query.filter_by(email=email, is_active=True).all() if email else []
+        matches = [u for u in accounts if u.check_password(password)]
 
-        if user and user.check_password(password):
-            if not user.is_active:
-                flash('Tu cuenta está deshabilitada. Contacta al administrador.', 'danger')
-                return render_template('auth/login.html', oidc_providers=_public_oidc_providers())
-
+        if matches:
             temp_password = _temporary_password_value()
-            force_change_on_success = bool(
-                user.must_change_password or (temp_password and password == temp_password)
-            )
 
-            if user.is_mfa_required and user.auth_source != 'oidc':
-                _invalidate_user_mfa_codes(user, MFA_CODE_PURPOSE_LOGIN)
-                code, raw_code = MfaCode.build_for_user(user, MFA_CODE_PURPOSE_LOGIN)
-                db.session.add(code)
-                db.session.commit()
-                send_mfa_code_email(user, user.company, raw_code, purpose=MFA_CODE_PURPOSE_LOGIN)
-                session['mfa_user_id'] = str(user.id)
-                session['mfa_remember'] = remember
-                session['mfa_force_password_change'] = force_change_on_success
-                flash('Enviamos un código de verificación a tu correo.', 'info')
-                return redirect(url_for('auth.mfa_verify'))
+            if len(matches) == 1:
+                user = matches[0]
+                force_change = bool(
+                    user.must_change_password or (temp_password and password == temp_password)
+                )
+                return _complete_login(user, remember, force_change)
 
-            login_user(user, remember=remember)
-            user.last_login = datetime.now(timezone.utc)
-            if force_change_on_success:
-                user.must_change_password = True
-                db.session.commit()
-                flash('Debes cambiar tu contraseña temporal antes de continuar.', 'warning')
-                return redirect(url_for('auth.force_password_change'))
-
-            db.session.commit()
-            flash('Sesión iniciada correctamente.', 'success')
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('dashboard.index'))
+            # Varias cuentas con la misma password: selector de empresa.
+            candidates = {}
+            for user in matches:
+                candidates[str(user.id)] = bool(
+                    user.must_change_password or (temp_password and password == temp_password)
+                )
+            session['login_candidates'] = candidates
+            session['login_remember'] = remember
+            return render_template('auth/select_company.html', accounts=matches)
 
         flash('Email o contraseña incorrectos.', 'danger')
 
     return render_template('auth/login.html', oidc_providers=_public_oidc_providers())
+
+
+@auth_bp.route('/select-company', methods=['POST'])
+@limiter.limit('10/minute;30/hour')
+def select_company():
+    candidates = session.get('login_candidates') or {}
+    user_id = (request.form.get('user_id') or '').strip()
+
+    if user_id not in candidates:
+        flash('Sesión de selección expirada. Inicia sesión nuevamente.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    user = db.session.get(User, user_id)
+    remember = session.pop('login_remember', False)
+    force_change = candidates.get(user_id, False)
+    session.pop('login_candidates', None)
+
+    if not user or not user.is_active:
+        flash('Cuenta no disponible.', 'danger')
+        return redirect(url_for('auth.login'))
+
+    return _complete_login(user, remember, force_change)
 
 
 @auth_bp.route('/mfa-verify', methods=['GET', 'POST'])
@@ -240,9 +281,16 @@ def forgot_password():
 
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
-        user = User.query.filter_by(email=email).first() if email else None
+        # Multi-cuenta: un email puede tener varias cuentas (una por empresa).
+        # Se envía un correo de reset por cuenta, identificado por empresa.
+        users = (
+            User.query
+            .filter_by(email=email, is_active=True)
+            .filter(User.auth_source == 'local')
+            .all()
+        ) if email else []
 
-        if user and user.is_active:
+        for user in users:
             _invalidate_user_reset_tokens(user)
             token, raw_token = PasswordResetToken.build_for_user(user)
             db.session.add(token)
@@ -252,7 +300,7 @@ def forgot_password():
 
         flash(
             'Si el correo existe y está activo, recibirás un enlace para '
-            'restablecer tu contraseña en unos minutos.',
+            'restablecer tu contraseña en unos minutos (uno por empresa si tienes varias cuentas).',
             'info',
         )
         return redirect(url_for('auth.login'))

@@ -321,10 +321,10 @@ def resolve_or_create_user(company, claims: dict, provider: OidcProvider) -> Use
 
     user: User | None = None
     if composite_sub:
-        user = User.query.filter_by(oidc_subject=composite_sub).first()
+        user = User.query.filter_by(oidc_subject=composite_sub, company_id=company.id).first()
 
     if not user and email:
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(email=email, company_id=company.id).first()
 
     if not user:
         # Sin auto-provisioning: el alta la hace el admin de la app.
@@ -335,7 +335,7 @@ def resolve_or_create_user(company, claims: dict, provider: OidcProvider) -> Use
     if not user.is_active:
         raise PermissionError("Tu cuenta está deshabilitada. Contacta al administrador.")
 
-    # Anclaje atómico del oidc_subject en el primer login OIDC.
+    # Anclaje atómico del oidc_subject en el primer login OIDC (por empresa).
     if composite_sub and user.oidc_subject != composite_sub:
         if user.oidc_subject is not None:
             # Ya estaba anclado a otro subject distinto. Caso raro (rotación
@@ -343,17 +343,17 @@ def resolve_or_create_user(company, claims: dict, provider: OidcProvider) -> Use
             raise PermissionError(
                 "Tu cuenta ya está vinculada a otra identidad SSO. Contacta al administrador."
             )
-        # UPDATE atómico: solo ancla si oidc_subject sigue siendo NULL.
-        # Si una sesión concurrente lo ancló primero, affected_rows = 0.
+        # UPDATE atómico: solo ancla si oidc_subject sigue siendo NULL
+        # dentro de esta empresa (evita races entre sesiones concurrentes).
         from sqlalchemy import update
         result = db.session.execute(
             update(User.__table__)
             .where(User.id == user.id)
+            .where(User.company_id == company.id)
             .where(User.oidc_subject.is_(None))
             .values(oidc_subject=composite_sub, auth_source="oidc")
         )
         if result.rowcount == 0:
-            # Otra sesión ganó la race. Recargar y verificar consistencia.
             db.session.refresh(user)
             if user.oidc_subject != composite_sub:
                 raise PermissionError("Conflicto al vincular identidad SSO. Intenta nuevamente.")

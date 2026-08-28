@@ -475,7 +475,8 @@ def send_password_reset_email(user, company, reset_url):
     subject = 'Recuperación de contraseña'
     body_text = (
         f'Hola {user.full_name},\n\n'
-        f'Recibimos una solicitud para restablecer tu contraseña en {app_name}.\n\n'
+        f'Recibimos una solicitud para restablecer tu contraseña en {app_name} '
+        f'(cuenta: {company.name}).\n\n'
         f'Usa el siguiente enlace para crear una nueva contraseña (vence en 30 minutos):\n'
         f'{reset_url}\n\n'
         f'Si no solicitaste este cambio, puedes ignorar este correo: tu contraseña no será modificada.'
@@ -485,7 +486,7 @@ def send_password_reset_email(user, company, reset_url):
         title='Recupera tu contraseña',
         greeting=f'Hola {user.full_name},',
         paragraphs=[
-            'Recibimos una solicitud para restablecer tu contraseña.',
+            f'Recibimos una solicitud para restablecer la contraseña de tu cuenta en <strong>{company.name}</strong>.',
             'Haz clic en el botón para crear una nueva. El enlace vence en 30 minutos.',
             'Si no fuiste tú, ignora este correo: tu contraseña no será cambiada.',
         ],

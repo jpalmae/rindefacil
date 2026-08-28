@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Seleccionar Empresa - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-md">
+        <div class="card shadow-sm rounded-2xl p-8">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center h-14 w-14 rounded-2xl bg-primary-light text-primary mb-3">
+                    <span class="i-heroicons-building-office-2 text-3xl"></span>
+                </div>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">Selecciona tu empresa</h2>
+                <p class="text-gray-500 text-sm">Tu correo tiene cuentas en más de una empresa. ¿Con cuál quieres entrar?</p>
+            </div>
+
+            <div class="space-y-3">
+                {% for account in accounts %}
+                <form method="POST" action="{{ url_for('auth.select_company') }}">
+                    <input type="hidden" name="user_id" value="{{ account.id }}">
+                    <button type="submit"
+                        class="w-full flex items-center gap-4 p-4 rounded-xl border border-gray-200 hover:border-primary/40 hover:bg-primary-light/30 transition-all text-left group">
+                        <div class="h-11 w-11 rounded-xl bg-primary-light text-primary flex items-center justify-center font-bold text-lg shrink-0">
+                            {{ account.company.name[:1] }}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-sm font-bold text-gray-900 truncate">{{ account.company.name }}</div>
+                            <div class="text-xs text-gray-500">{{ account.role | capitalize }}{% if account.company.base_currency %} · {{ account.company.base_currency }}{% endif %}</div>
+                        </div>
+                        <span class="i-heroicons-chevron-right text-gray-400 group-hover:text-primary shrink-0"></span>
+                    </button>
+                </form>
+                {% endfor %}
+            </div>
+
+            <div class="mt-8 text-center">
+                <a href="{{ url_for('auth.login') }}" class="text-sm text-gray-500 hover:text-gray-700 font-medium">Cancelar y volver</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

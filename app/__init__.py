@@ -76,6 +76,7 @@ def create_app(config_name=None):
         brand_icon_url = None
         brand_default_domain = ''
         brand_theme = 'executive'
+        currency_symbol = '$'
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
             unread_count = notifications_q.filter_by(is_read=False).count()
@@ -91,6 +92,7 @@ def create_app(config_name=None):
                 or company_settings.get('brand_default_domain')
                 or ''
             )
+            currency_symbol = current_user.company.currency_symbol if current_user.company else '$'
         else:
             company = Company.query.order_by(Company.created_at.asc()).first()
             if company and company.settings:
@@ -114,6 +116,7 @@ def create_app(config_name=None):
             brand_icon_url=brand_icon_url,
             brand_default_domain=brand_default_domain,
             brand_theme=brand_theme,
+            currency_symbol=currency_symbol,
         )
 
     # Security Headers
