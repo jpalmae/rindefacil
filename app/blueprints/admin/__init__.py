@@ -239,7 +239,7 @@ def cost_centers():
 @admin_bp.route('/categories')
 def categories():
     cats = Category.query.filter_by(company_id=current_user.company_id).order_by(Category.name.asc()).all()
-    return render_template('admin/categories.html', categories=cats)
+    return render_template('admin/categories.html', categories=cats, company=current_user.company)
 
 
 @admin_bp.route('/categories/new', methods=['GET', 'POST'])
