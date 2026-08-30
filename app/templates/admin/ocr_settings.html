@@ -123,20 +123,11 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">URL del servidor (base_url) <span class="text-danger">*</span></label>
-                        <div class="flex flex-col sm:flex-row gap-2">
-                            <select class="input sm:max-w-[200px]" onchange="if(this.value) document.getElementById('local_base_url').value=this.value">
-                                <option value="">— Preset —</option>
-                                {% for name, url in presets.items() %}
-                                <option value="{{ url }}">{{ name }}</option>
-                                {% endfor %}
-                            </select>
-                            <input type="text" name="local_base_url" id="local_base_url" class="input flex-1"
-                                value="{{ ocr_settings.local_base_url }}" placeholder="http://localhost:11434/v1">
-                        </div>
+                        <input type="text" name="local_base_url" id="local_base_url" class="input w-full"
+                            value="{{ ocr_settings.local_base_url }}" placeholder="https://api.openai.com/v1  ·  http://localhost:11434/v1">
                         <p class="text-[11px] text-gray-400 mt-1">
-                            Cualquier endpoint con API OpenAI-compatible. Ejemplos: OpenAI
-                            <code>https://api.openai.com/v1</code> · Ollama <code>http://localhost:11434/v1</code> ·
-                            LMStudio <code>http://localhost:1234/v1</code>. Debe terminar en <code>/v1</code> y ser alcanzable desde el servidor de la app.
+                            Cualquier endpoint con API OpenAI-compatible: OpenAI, Ollama, LMStudio, vLLM, llama.cpp, LiteLLM.
+                            Debe terminar en <code>/v1</code> y ser alcanzable desde el servidor de la app.
                         </p>
                     </div>
 
