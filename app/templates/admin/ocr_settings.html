@@ -12,13 +12,13 @@
 
     {% if ocr_settings.source == 'env' %}
     <div class="mb-4 p-4 rounded-xl border border-warning/40 bg-warning-light/60 text-sm text-warning-dark">
-        <strong>Configuración heredada del servidor.</strong>
-        Actualmente se usa <code class="bg-white px-1 rounded">OPENROUTER_API_KEY</code> del archivo <code class="bg-white px-1 rounded">.env</code>.
-        Para usar esta empresa de forma independiente, define un proveedor abajo y guarda.
+        <strong>Esta empresa aún no tiene configuración propia.</strong>
+        Mientras no guardes una, se usa el respaldo del servidor (<code class="bg-white px-1 rounded">.env</code>).
+        Al guardar esta formulario, <strong>se usa exactamente lo que definas aquí</strong>.
     </div>
     {% elif ocr_settings.source == 'none' %}
     <div class="mb-4 p-4 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-600">
-        OCR no configurado. Activa la opción para elegir proveedor.
+        OCR sin configurar. Completa y guarda para activarlo.
     </div>
     {% endif %}
 
@@ -37,41 +37,62 @@
                     </label>
                 </div>
 
-                <!-- Proveedor -->
-                <div class="grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Proveedor</label>
-                        <select name="ocr_provider" id="ocr_provider" class="input" onchange="toggleProviderSections()">
-                            <option value="openrouter" {% if ocr_settings.provider == 'openrouter' %}selected{% endif %}>OpenRouter (cloud)</option>
-                            <option value="local" {% if ocr_settings.provider == 'local' %}selected{% endif %}>Local (OpenAI-compatible)</option>
-                        </select>
+                <!-- Selector de proveedor: pestañas visibles -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Proveedor</label>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <label class="provider-option cursor-pointer rounded-xl border-2 border-gray-200 p-4 hover:border-primary/40 transition-all" id="tab-openrouter">
+                            <input type="radio" name="ocr_provider" value="openrouter" class="sr-only"
+                                {% if ocr_settings.provider != 'local' %}checked{% endif %} onchange="toggleProviderSections()">
+                            <div class="flex items-start gap-3">
+                                <span class="i-heroicons-cloud text-xl text-primary mt-0.5"></span>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">OpenRouter (cloud)</div>
+                                    <div class="text-xs text-gray-500 mt-0.5">Cientos de modelos vía API. Sin URL: la nube es fija.</div>
+                                </div>
+                            </div>
+                        </label>
+                        <label class="provider-option cursor-pointer rounded-xl border-2 border-gray-200 p-4 hover:border-primary/40 transition-all" id="tab-local">
+                            <input type="radio" name="ocr_provider" value="local" class="sr-only"
+                                {% if ocr_settings.provider == 'local' %}checked{% endif %} onchange="toggleProviderSections()">
+                            <div class="flex items-start gap-3">
+                                <span class="i-heroicons-server-stack text-xl text-primary mt-0.5"></span>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">OpenAI-compatible (tu URL)</div>
+                                    <div class="text-xs text-gray-500 mt-0.5">OpenAI, Ollama, LMStudio, vLLM, llama.cpp, LiteLLM…</div>
+                                </div>
+                            </div>
+                        </label>
                     </div>
-                    <div class="text-xs text-gray-500 self-end pb-2 leading-relaxed">
-                        <div id="provider-hint-openrouter">Cloud: accede a modelos como gpt-4o-mini vía OpenRouter.</div>
-                        <div id="provider-hint-local" class="hidden">Servidores compatibles: Ollama, LMStudio, LiteLLM, vLLM, llama.cpp.</div>
-                    </div>
+                    <input type="hidden" name="_provider_fallback" value="">
                 </div>
 
                 <!-- ============ OpenRouter ============ -->
                 <div id="section-openrouter" class="space-y-4 pt-4 border-t border-gray-100">
-                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">OpenRouter</h3>
+                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">OpenRouter (cloud)</h3>
+                    <p class="text-xs text-gray-500 -mt-2">Sin URL que configurar: el proveedor es fijo. Solo necesitas tu API key.</p>
 
                     <div>
                         <div class="flex items-center justify-between mb-1">
                             <label class="block text-sm font-medium text-gray-700">Modelo principal</label>
-                            <button type="button" onclick="loadModels('openrouter')"
-                                id="btn-models-openrouter"
+                            <button type="button" onclick="loadModels('openrouter')" id="btn-models-openrouter"
                                 class="text-xs btn-outline !py-1 !px-2">Cargar modelos del proveedor</button>
                         </div>
-                        <input type="text" name="openrouter_model" id="openrouter_model" class="input" list="models-openrouter"
+                        <input type="text" name="openrouter_model" id="openrouter_model" class="input"
                             value="{{ ocr_settings.openrouter_model }}" placeholder="openai/gpt-4o-mini">
-                        <datalist id="models-openrouter"></datalist>
-                        <p class="text-[11px] text-gray-400 mt-1" id="hint-openrouter">Escribe libremente o carga la lista para elegir.</p>
+                        <div id="model-browser-openrouter" class="hidden mt-2 rounded-xl border border-gray-200 bg-white overflow-hidden">
+                            <div class="p-2 border-b border-gray-100">
+                                <input type="text" oninput="filterModels('openrouter', this.value)" class="input !py-1.5 !text-xs"
+                                    placeholder="Filtrar modelos (ej: openai, vision, gemini…)">
+                            </div>
+                            <div class="max-h-52 overflow-y-auto" id="model-list-openrouter"></div>
+                            <div class="px-3 py-1.5 border-t border-gray-100 text-[10px] text-gray-400" id="model-count-openrouter"></div>
+                        </div>
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Modelo fallback (opcional)</label>
-                        <input type="text" name="openrouter_model_fallback" class="input" list="models-openrouter"
+                        <input type="text" name="openrouter_model_fallback" class="input"
                             value="{{ ocr_settings.openrouter_model_fallback }}" placeholder="google/gemini-2.0-flash-exp">
                     </div>
 
@@ -96,13 +117,13 @@
                     </div>
                 </div>
 
-                <!-- ============ Local ============ -->
+                <!-- ============ Local / OpenAI-compatible ============ -->
                 <div id="section-local" class="space-y-4 pt-4 border-t border-gray-100">
-                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Local (OpenAI-compatible)</h3>
+                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Servidor OpenAI-compatible</h3>
 
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">URL del servidor (base_url)</label>
-                        <div class="flex gap-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">URL del servidor (base_url) <span class="text-danger">*</span></label>
+                        <div class="flex flex-col sm:flex-row gap-2">
                             <select class="input sm:max-w-[200px]" onchange="if(this.value) document.getElementById('local_base_url').value=this.value">
                                 <option value="">— Preset —</option>
                                 {% for name, url in presets.items() %}
@@ -112,25 +133,35 @@
                             <input type="text" name="local_base_url" id="local_base_url" class="input flex-1"
                                 value="{{ ocr_settings.local_base_url }}" placeholder="http://localhost:11434/v1">
                         </div>
-                        <p class="text-[11px] text-gray-400 mt-1">Debe terminar en <code>/v1</code> y ser alcanzable desde el servidor de la app.</p>
+                        <p class="text-[11px] text-gray-400 mt-1">
+                            Cualquier endpoint con API OpenAI-compatible. Ejemplos: OpenAI
+                            <code>https://api.openai.com/v1</code> · Ollama <code>http://localhost:11434/v1</code> ·
+                            LMStudio <code>http://localhost:1234/v1</code>. Debe terminar en <code>/v1</code> y ser alcanzable desde el servidor de la app.
+                        </p>
                     </div>
 
                     <div>
                         <div class="flex items-center justify-between mb-1">
                             <label class="block text-sm font-medium text-gray-700">Modelo principal</label>
-                            <button type="button" onclick="loadModels('local')"
-                                id="btn-models-local"
+                            <button type="button" onclick="loadModels('local')" id="btn-models-local"
                                 class="text-xs btn-outline !py-1 !px-2">Cargar modelos del servidor</button>
                         </div>
-                        <input type="text" name="local_model" id="local_model" class="input" list="models-local"
+                        <input type="text" name="local_model" id="local_model" class="input"
                             value="{{ ocr_settings.local_model }}" placeholder="llama3.2-vision">
-                        <datalist id="models-local"></datalist>
-                        <p class="text-[11px] text-gray-400 mt-1" id="hint-local">Escribe libremente o carga la lista del servidor (requiere URL guardada o escrita arriba).</p>
+                        <div id="model-browser-local" class="hidden mt-2 rounded-xl border border-gray-200 bg-white overflow-hidden">
+                            <div class="p-2 border-b border-gray-100">
+                                <input type="text" oninput="filterModels('local', this.value)" class="input !py-1.5 !text-xs"
+                                    placeholder="Filtrar modelos…">
+                            </div>
+                            <div class="max-h-52 overflow-y-auto" id="model-list-local"></div>
+                            <div class="px-3 py-1.5 border-t border-gray-100 text-[10px] text-gray-400" id="model-count-local"></div>
+                        </div>
+                        <p class="text-[11px] text-gray-400 mt-1" id="hint-local">Escribe el modelo a mano o cárgalo desde el servidor.</p>
                     </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Modelo fallback (opcional)</label>
-                        <input type="text" name="local_model_fallback" class="input" list="models-local"
+                        <input type="text" name="local_model_fallback" class="input"
                             value="{{ ocr_settings.local_model_fallback }}" placeholder="minicpm-v">
                     </div>
 
@@ -144,7 +175,7 @@
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">API Key (opcional)</label>
                             <input type="password" name="local_api_key" class="input"
-                                placeholder="{% if ocr_settings.local_has_api_key %}Configurada: {{ ocr_settings.local_masked_api_key }} — deja en blanco para mantenerla{% else %}sk-no-key-required (la mayoría no requiere){% endif %}">
+                                placeholder="{% if ocr_settings.local_has_api_key %}Configurada: {{ ocr_settings.local_masked_api_key }} — deja en blanco para mantenerla{% else %}sk-... (requerida para OpenAI; local suele omitirla){% endif %}">
                             {% if ocr_settings.local_has_api_key %}
                             <label class="inline-flex items-center gap-2 text-sm text-gray-600 mt-2">
                                 <input type="checkbox" name="remove_local_api_key" value="1">
@@ -173,21 +204,22 @@
         <div class="space-y-6">
             <div class="card">
                 <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Probar conexión</h2>
-                <p class="text-sm text-gray-500 mt-2">Envía una imagen sintética mínima al modelo actual y muestra la respuesta.</p>
+                <p class="text-sm text-gray-500 mt-2">Guarda primero la configuración y luego envía una imagen sintética al modelo configurado.</p>
                 <form method="POST" action="{{ url_for('admin.ocr_settings_test') }}" class="mt-4">
                     <button type="submit" class="btn-primary w-full">Probar ahora</button>
                 </form>
                 <p class="text-[11px] text-gray-400 mt-3 leading-relaxed">
-                    La imagen de prueba es un recibo generado con monto <code>$1.990</code>. Valida que el servidor responde y que el formato vision funciona.
+                    Envía un recibo sintético (monto <code>$1.990</code>) exactamente con la configuración guardada en esta página.
+                    Valida URL, API key, modelo y formato vision de punta a punta.
                 </p>
             </div>
 
             <div class="card">
                 <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Notas</h2>
                 <ul class="mt-3 space-y-2 text-sm text-gray-600 list-disc pl-5">
-                    <li>La API key de OpenRouter puede ser la misma del <code>.env</code>.</li>
-                    <li>Si desactivas OCR y no hay config en <code>.env</code>, la carga manual sigue funcionando.</li>
-                    <li>Modelos locales pequeños pueden equivocarse con JSON; revisa los resultados.</li>
+                    <li><strong>Esta sección es la fuente de verdad</strong>: el OCR de {{ company.name }} usa exactamente lo que guardes aquí (URL, API key, modelos y prompt).</li>
+                    <li>El respaldo del <code>.env</code> solo aplica mientras no guardes nada en esta sección.</li>
+                    <li>El modelo debe soportar <strong>imágenes (vision)</strong>: boletas se envían como imagen. Si el test falla con "does not support image input", elige un modelo con visión.</li>
                     {% if not can_encrypt %}
                     <li class="text-warning-dark"><strong>SETTINGS_ENCRYPTION_KEY no configurado:</strong> no se podrán guardar API keys.</li>
                     {% endif %}
@@ -202,13 +234,15 @@ const OCR_DEFAULT_PROMPTS = {
     openrouter: {{ default_cloud_prompt | tojson }},
     local: {{ default_local_prompt | tojson }}
 };
+const OCR_MODELS = { openrouter: [], local: [] };
 
 function toggleProviderSections() {
-    const provider = document.getElementById('ocr_provider').value;
+    const checked = document.querySelector('input[name="ocr_provider"]:checked');
+    const provider = checked ? checked.value : 'openrouter';
     document.getElementById('section-openrouter').classList.toggle('hidden', provider !== 'openrouter');
     document.getElementById('section-local').classList.toggle('hidden', provider !== 'local');
-    document.getElementById('provider-hint-openrouter').classList.toggle('hidden', provider !== 'openrouter');
-    document.getElementById('provider-hint-local').classList.toggle('hidden', provider !== 'local');
+    document.getElementById('tab-openrouter').classList.toggle('border-primary', provider === 'openrouter');
+    document.getElementById('tab-local').classList.toggle('border-primary', provider === 'local');
 }
 
 function restorePrompt(kind) {
@@ -216,16 +250,39 @@ function restorePrompt(kind) {
     document.getElementById(kind === 'openrouter' ? 'openrouter_prompt' : 'local_prompt').value = OCR_DEFAULT_PROMPTS[kind];
 }
 
+function setModel(provider, modelId) {
+    document.getElementById(provider === 'openrouter' ? 'openrouter_model' : 'local_model').value = modelId;
+}
+
+function filterModels(provider, term) {
+    renderModelList(provider, OCR_MODELS[provider].filter(m =>
+        m.id.toLowerCase().includes((term || '').toLowerCase())
+    ));
+}
+
+function renderModelList(provider, models) {
+    const list = document.getElementById('model-list-' + provider);
+    list.innerHTML = '';
+    models.forEach(m => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-full text-left px-3 py-1.5 text-xs hover:bg-primary-light/50 font-mono';
+        btn.textContent = m.id;
+        btn.title = m.name || m.id;
+        btn.onclick = () => setModel(provider, m.id);
+        list.appendChild(btn);
+    });
+    document.getElementById('model-count-' + provider).textContent =
+        models.length + ' modelo(s) — click para elegir. También puedes escribir a mano.';
+}
+
 function loadModels(provider) {
     const btn = document.getElementById('btn-models-' + provider);
-    const hint = document.getElementById('hint-' + provider);
-    const list = document.getElementById('models-' + provider);
-
     const params = new URLSearchParams({ provider: provider });
     if (provider === 'local') {
         const baseUrl = document.getElementById('local_base_url').value.trim();
         if (!baseUrl) {
-            hint.textContent = 'Escribe primero la URL del servidor.';
+            alert('Escribe primero la URL del servidor (base_url).');
             return;
         }
         params.set('base_url', baseUrl);
@@ -233,27 +290,19 @@ function loadModels(provider) {
 
     btn.disabled = true;
     btn.textContent = 'Cargando…';
-    hint.textContent = 'Consultando modelos…';
 
     fetch("{{ url_for('admin.ocr_settings_models') }}?" + params.toString())
         .then(r => r.json())
         .then(data => {
             if (!data.ok) {
-                hint.textContent = 'Error: ' + (data.error || 'no se pudo obtener la lista');
+                alert('No se pudo obtener la lista: ' + (data.error || 'error desconocido'));
                 return;
             }
-            list.innerHTML = '';
-            data.models.forEach(m => {
-                const opt = document.createElement('option');
-                opt.value = m.id;
-                opt.label = m.name || m.id;
-                list.appendChild(opt);
-            });
-            hint.textContent = data.models.length + ' modelos cargados. Escribe en el campo para filtrar y elegir.';
+            OCR_MODELS[provider] = data.models;
+            document.getElementById('model-browser-' + provider).classList.remove('hidden');
+            renderModelList(provider, data.models);
         })
-        .catch(err => {
-            hint.textContent = 'Error de red: ' + err;
-        })
+        .catch(err => alert('Error de red: ' + err))
         .finally(() => {
             btn.disabled = false;
             btn.textContent = provider === 'openrouter' ? 'Cargar modelos del proveedor' : 'Cargar modelos del servidor';
