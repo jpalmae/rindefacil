@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Empresas - {{ brand_app_name }} Admin{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-8 gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <a href="{{ url_for('admin.index') }}" class="text-gray-400 hover:text-primary transition-colors">
+                    <span class="i-heroicons-arrow-left text-xl block"></span>
+                </a>
+                <h1 class="text-2xl font-black text-gray-900 leading-tight">Mantenedor de Empresas</h1>
+            </div>
+            <p class="text-gray-500 ml-8 text-sm">Creación y administración de las empresas de la plataforma (solo superadmin).</p>
+        </div>
+        <a href="{{ url_for('admin.company_new') }}" class="btn-primary flex items-center gap-2 ml-8 md:ml-0">
+            <span class="i-heroicons-plus"></span> Nueva Empresa
+        </a>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-100">
+                <thead class="bg-gray-50/50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Empresa</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">RUT / ID</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Zona horaria</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Moneda base</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Usuarios</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gastos</th>
+                        <th class="px-6 py-4 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Acción</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for c in companies %}
+                    <tr class="hover:bg-gray-50/50 transition-colors {% if c.id == current_user.company_id %}bg-primary-light/20{% endif %}">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center gap-3">
+                                <div class="h-9 w-9 rounded-xl bg-primary-light text-primary flex items-center justify-center font-bold text-sm">
+                                    {{ c.name[:1] }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-gray-900">{{ c.name }}</div>
+                                    {% if c.id == current_user.company_id %}<div class="text-[10px] text-primary font-semibold">tu empresa actual</div>{% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-500">{{ c.rut or '—' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-xs text-gray-600">{{ c.timezone }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="badge border border-gray-200 bg-gray-50 text-gray-700 text-[10px] px-2 py-0.5 font-mono">{{ c.base_currency }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ c.users }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ c.expenses }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                            <a href="{{ url_for('admin.company_edit', company_id=c.id) }}"
+                                class="btn-outline !py-1.5 !px-3 !text-xs inline-flex items-center gap-1.5">
+                                <span class="i-heroicons-pencil-square text-sm"></span> Editar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="mt-6 card">
+        <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Notas</h2>
+        <ul class="mt-3 space-y-2 text-sm text-gray-600 list-disc pl-5">
+            <li>Sección <strong>superadmin</strong>: atraviesa todas las empresas de la plataforma.</li>
+            <li>Al crear una empresa se define su admin inicial (deberá cambiar su password en el primer login).</li>
+            <li>La moneda base no se puede cambiar si la empresa ya tiene gastos registrados.</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

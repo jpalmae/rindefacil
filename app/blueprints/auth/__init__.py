@@ -114,7 +114,7 @@ def _complete_login(user, remember, force_change_on_success):
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
-@limiter.limit('10/minute;30/hour')
+@limiter.limit('30/minute;100/hour')
 def login():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
@@ -154,7 +154,7 @@ def login():
 
 
 @auth_bp.route('/select-company', methods=['POST'])
-@limiter.limit('10/minute;30/hour')
+@limiter.limit('30/minute;100/hour')
 def select_company():
     candidates = session.get('login_candidates') or {}
     user_id = (request.form.get('user_id') or '').strip()
@@ -173,6 +173,31 @@ def select_company():
         return redirect(url_for('auth.login'))
 
     return _complete_login(user, remember, force_change)
+
+
+@auth_bp.route('/switch-company', methods=['POST'])
+@login_required
+@limiter.limit('30/minute;100/hour')
+def switch_company():
+    """Cambia a otra cuenta del MISMO email (otra empresa), sin re-login."""
+    target_id = (request.form.get('user_id') or '').strip()
+    target = db.session.get(User, target_id) if target_id else None
+
+    if (
+        not target
+        or not target.is_active
+        or target.id == current_user.id
+        or (target.email or '').strip().lower() != (current_user.email or '').strip().lower()
+    ):
+        flash('No se puede cambiar a esa empresa.', 'danger')
+        return redirect(url_for('dashboard.index'))
+
+    logout_user()
+    login_user(target, remember=False)
+    target.last_login = datetime.now(timezone.utc)
+    db.session.commit()
+    flash(f'Cambiaste a {target.company.name}.', 'success')
+    return redirect(url_for('dashboard.index'))
 
 
 @auth_bp.route('/mfa-verify', methods=['GET', 'POST'])
@@ -274,7 +299,7 @@ def mfa_resend():
 
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
-@limiter.limit('5/minute;15/hour')
+@limiter.limit('10/minute;30/hour')
 def forgot_password():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
@@ -309,7 +334,7 @@ def forgot_password():
 
 
 @auth_bp.route('/reset-password/<token>', methods=['GET', 'POST'])
-@limiter.limit('10/minute;30/hour')
+@limiter.limit('30/minute;100/hour')
 def reset_password(token):
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
@@ -563,7 +588,7 @@ def revoke_api_key(key_id):
 
 @auth_bp.route('/profile/mfa/setup', methods=['GET', 'POST'])
 @login_required
-@limiter.limit('5/minute;15/hour')
+@limiter.limit('10/minute;30/hour')
 def mfa_setup():
     if current_user.mfa_enabled:
         flash('La verificación en dos pasos ya está activada.', 'info')
@@ -633,7 +658,7 @@ def _public_oidc_providers():
 
 
 @auth_bp.route('/oidc/login/<uuid:provider_id>', methods=['GET'])
-@limiter.limit('10/minute;30/hour')
+@limiter.limit('30/minute;100/hour')
 def oidc_login(provider_id):
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))

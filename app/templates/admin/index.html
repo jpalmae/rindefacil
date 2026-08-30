@@ -57,6 +57,36 @@
             </div>
         </a>
 
+        <a href="{{ url_for('admin.categories') }}"
+            class="group block p-8 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary/20 transition-all duration-300">
+            <div class="flex items-center gap-5">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="i-heroicons-tag text-2xl"></span>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 leading-tight">Categorías</h3>
+                    <p class="text-sm text-gray-500 mt-1">Mantenedor de categorías de rendición.</p>
+                </div>
+            </div>
+        </a>
+
+        {% if current_user.has_role('superadmin') %}
+        <a href="{{ url_for('admin.companies') }}"
+            class="group block p-8 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary/20 transition-all duration-300">
+            <div class="flex items-center gap-5">
+                <div
+                    class="w-14 h-14 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <span class="i-heroicons-globe-alt text-2xl"></span>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 leading-tight">Empresas <span class="text-[10px] font-mono text-gray-400 align-middle">superadmin</span></h3>
+                    <p class="text-sm text-gray-500 mt-1">Creación y administración de empresas.</p>
+                </div>
+            </div>
+        </a>
+        {% endif %}
+
         <!-- Branding -->
         <a href="{{ url_for('admin.branding') }}"
             class="group block p-8 bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl hover:border-primary/20 transition-all duration-300">

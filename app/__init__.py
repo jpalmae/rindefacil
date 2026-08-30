@@ -65,6 +65,7 @@ def create_app(config_name=None):
     def inject_template_context():
         from app.models.company import Company
         from app.models.notification import Notification
+        from app.models.user import User
 
         css_path = os.path.join(app.static_folder, 'css', 'uno.css')
         css_version = int(os.path.getmtime(css_path)) if os.path.exists(css_path) else 1
@@ -77,6 +78,7 @@ def create_app(config_name=None):
         brand_default_domain = ''
         brand_theme = 'executive'
         currency_symbol = '$'
+        switcher_companies = []
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
             unread_count = notifications_q.filter_by(is_read=False).count()
@@ -93,6 +95,16 @@ def create_app(config_name=None):
                 or ''
             )
             currency_symbol = current_user.company.currency_symbol if current_user.company else '$'
+
+            # Otras cuentas del mismo email (para el switcher de empresa).
+            switcher_companies = [
+                {'user_id': str(u.id), 'company_name': u.company.name}
+                for u in User.query.filter(
+                    User.email == current_user.email,
+                    User.id != current_user.id,
+                    User.is_active == True,  # noqa: E712
+                ).all()
+            ]
         else:
             company = Company.query.order_by(Company.created_at.asc()).first()
             if company and company.settings:
@@ -117,6 +129,7 @@ def create_app(config_name=None):
             brand_default_domain=brand_default_domain,
             brand_theme=brand_theme,
             currency_symbol=currency_symbol,
+            switcher_companies=switcher_companies,
         )
 
     # Security Headers

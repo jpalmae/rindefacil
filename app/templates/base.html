@@ -467,8 +467,23 @@
                             </div>
                             <a href="{{ url_for('auth.profile') }}"
                                 class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mi Perfil</a>
+                            {% if switcher_companies %}
+                            <div class="border-t border-gray-100 mt-1 pt-1">
+                                <p class="px-4 pt-1 pb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Cambiar de empresa</p>
+                                {% for sc in switcher_companies %}
+                                <form method="POST" action="{{ url_for('auth.switch_company') }}">
+                                    <input type="hidden" name="user_id" value="{{ sc.user_id }}">
+                                    <button type="submit"
+                                        class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2">
+                                        <span class="i-heroicons-building-office-2 text-gray-400 text-sm"></span>
+                                        {{ sc.company_name }}
+                                    </button>
+                                </form>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
                             <a href="{{ url_for('auth.logout') }}"
-                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Cerrar sesión</a>
+                                class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 border-t border-gray-100">Cerrar sesión</a>
                         </div>
                     </div>
                 </div>

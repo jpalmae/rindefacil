@@ -1,5 +1,6 @@
 import os
 import time
+from functools import wraps
 from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
@@ -7,7 +8,7 @@ from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from app.extensions import db
-from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog
+from app.models import User, UserRole, ApprovalFlow, ApprovalStep, CostCenter, AuditLog, Category, Company, Expense
 from werkzeug.utils import secure_filename
 from app.services.email_service import get_company_email_settings_view, send_test_email
 from app.services.secrets_service import can_encrypt_settings, encrypt_setting
@@ -235,6 +236,92 @@ def cost_centers():
     centers = CostCenter.query.filter_by(company_id=current_user.company_id).all()
     return render_template('admin/cost_centers.html', cost_centers=centers)
 
+@admin_bp.route('/categories')
+def categories():
+    cats = Category.query.filter_by(company_id=current_user.company_id).order_by(Category.name.asc()).all()
+    return render_template('admin/categories.html', categories=cats)
+
+
+@admin_bp.route('/categories/new', methods=['GET', 'POST'])
+def category_new():
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        icon = (request.form.get('icon') or '').strip() or None
+        account_code = (request.form.get('account_code') or '').strip() or None
+
+        if not name:
+            flash('El nombre de la categoría es obligatorio.', 'danger')
+            return redirect(url_for('admin.category_new'))
+        if Category.query.filter_by(company_id=current_user.company_id, name=name).first():
+            flash(f'Ya existe una categoría llamada "{name}".', 'warning')
+            return redirect(url_for('admin.category_new'))
+
+        cat = Category(
+            company_id=current_user.company_id,
+            name=name,
+            icon=icon,
+            account_code=account_code,
+            is_active=True,
+        )
+        db.session.add(cat)
+        db.session.commit()
+        from app.services.audit_service import log_action
+        log_action('category_created', entity_type='category', entity_id=cat.id, description=f'Categoría "{name}" creada.')
+        flash('Categoría creada.', 'success')
+        return redirect(url_for('admin.categories'))
+
+    return render_template('admin/category_form.html', category=None)
+
+
+@admin_bp.route('/categories/<uuid:id>/edit', methods=['GET', 'POST'])
+def category_edit(id):
+    cat = Category.query.filter_by(id=id, company_id=current_user.company_id).first_or_404()
+
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        if not name:
+            flash('El nombre de la categoría es obligatorio.', 'danger')
+            return redirect(url_for('admin.category_edit', id=cat.id))
+        dup = Category.query.filter_by(company_id=current_user.company_id, name=name).first()
+        if dup and dup.id != cat.id:
+            flash(f'Ya existe otra categoría llamada "{name}".', 'warning')
+            return redirect(url_for('admin.category_edit', id=cat.id))
+
+        cat.name = name
+        cat.icon = (request.form.get('icon') or '').strip() or None
+        cat.account_code = (request.form.get('account_code') or '').strip() or None
+        db.session.commit()
+        from app.services.audit_service import log_action
+        log_action('category_updated', entity_type='category', entity_id=cat.id, description=f'Categoría "{name}" actualizada.')
+        flash('Categoría actualizada.', 'success')
+        return redirect(url_for('admin.categories'))
+
+    return render_template('admin/category_form.html', category=cat)
+
+
+@admin_bp.route('/categories/<uuid:id>/toggle', methods=['POST'])
+def category_toggle(id):
+    cat = Category.query.filter_by(id=id, company_id=current_user.company_id).first_or_404()
+
+    if not cat.is_active:
+        cat.is_active = True
+        flash(f'Categoría "{cat.name}" reactivada.', 'success')
+    else:
+        # Soft-delete: preservar historia de gastos. Solo se valida que no
+        # sea la última categoría activa de la empresa.
+        active_count = Category.query.filter_by(company_id=current_user.company_id, is_active=True).count()
+        if active_count <= 1:
+            flash('No puedes desactivar la única categoría activa de la empresa.', 'danger')
+            return redirect(url_for('admin.categories'))
+        cat.is_active = False
+        flash(f'Categoría "{cat.name}" desactivada. Los gastos históricos la conservan.', 'warning')
+
+    db.session.commit()
+    from app.services.audit_service import log_action
+    log_action('category_toggled', entity_type='category', entity_id=cat.id, description=f'Categoría "{cat.name}" activada={cat.is_active}.')
+    return redirect(url_for('admin.categories'))
+
+
 @admin_bp.route('/cost-centers/new', methods=['GET', 'POST'])
 def cost_center_new():
     if request.method == 'POST':
@@ -386,7 +473,7 @@ def user_activate(user_id):
 def cost_center_delete(id):
     center = CostCenter.query.get_or_404(id)
     # Check if users are assigned
-    if center.users.first():
+    if User.query.filter_by(cost_center_id=center.id).first():
         flash('No se puede eliminar un centro de costo con usuarios asignados.', 'danger')
         return redirect(url_for('admin.cost_centers'))
         
@@ -846,3 +933,152 @@ def oidc_provider_delete(provider_id):
     db.session.commit()
     flash(f'Provider "{name}" eliminado.', 'warning')
     return redirect(url_for('admin.oidc_providers'))
+
+
+# ---------------------------------------------------------------------------
+# Mantenedor de Empresas (solo superadmin — cruza el aislamiento multi-tenant)
+# ---------------------------------------------------------------------------
+def superadmin_required(view_func):
+    @wraps(view_func)
+    def wrapped(*args, **kwargs):
+        if not current_user.has_role(UserRole.SUPERADMIN):
+            flash('Esta sección requiere rol superadmin.', 'danger')
+            return redirect(url_for('admin.index'))
+        return view_func(*args, **kwargs)
+    return wrapped
+
+
+@admin_bp.route('/companies')
+@superadmin_required
+def companies():
+    all_companies = Company.query.order_by(Company.created_at.asc()).all()
+    rows = []
+    for c in all_companies:
+        rows.append({
+            'id': c.id,
+            'name': c.name,
+            'rut': c.rut,
+            'timezone': c.timezone,
+            'base_currency': c.base_currency,
+            'users': User.query.filter_by(company_id=c.id).count(),
+            'expenses': db.session.query(Expense.id).filter_by(company_id=c.id).count(),
+        })
+    return render_template('admin/companies.html', companies=rows)
+
+
+@admin_bp.route('/companies/new', methods=['GET', 'POST'])
+@superadmin_required
+def company_new():
+    from app.models.company import COMMON_TIMEZONES, BASE_CURRENCY_CHOICES
+
+    if request.method == 'POST':
+        name = (request.form.get('name') or '').strip()
+        rut = (request.form.get('rut') or '').strip() or None
+        timezone_value = (request.form.get('timezone') or 'America/Santiago').strip()
+        base_currency_value = (request.form.get('base_currency') or 'CLP').strip().upper()
+        admin_full_name = (request.form.get('admin_full_name') or '').strip()
+        admin_email = (request.form.get('admin_email') or '').strip().lower()
+        admin_password = request.form.get('admin_password') or ''
+
+        if not name or not admin_full_name or '@' not in admin_email or len(admin_password) < 8:
+            flash('Completa nombre de empresa, admin (nombre, email válido) y password de al menos 8 caracteres.', 'danger')
+            return redirect(url_for('admin.company_new'))
+        if base_currency_value not in BASE_CURRENCY_CHOICES:
+            base_currency_value = 'CLP'
+
+        from zoneinfo import ZoneInfo
+        try:
+            ZoneInfo(timezone_value)
+        except Exception:
+            timezone_value = 'America/Santiago'
+
+        try:
+            company = Company(
+                name=name,
+                rut=rut,
+                settings={},
+                timezone=timezone_value,
+                base_currency=base_currency_value,
+            )
+            db.session.add(company)
+            db.session.flush()
+
+            admin_user = User(
+                company_id=company.id,
+                email=admin_email,
+                full_name=admin_full_name,
+                role=UserRole.ADMIN,
+                is_active=True,
+                must_change_password=True,
+                auth_source='local',
+            )
+            admin_user.set_password(admin_password)
+            db.session.add(admin_user)
+            db.session.commit()
+
+            from app.services.audit_service import log_action
+            log_action('company_created', entity_type='company', entity_id=company.id,
+                       description=f'Empresa "{name}" creada con admin inicial {admin_email}.')
+            flash(f'Empresa "{name}" creada. Su admin inicial ({admin_email}) deberá cambiar su password al primer login.', 'success')
+            return redirect(url_for('admin.companies'))
+        except IntegrityError:
+            db.session.rollback()
+            flash(f'Ya existe un usuario {admin_email} en esta empresa.', 'warning')
+            return redirect(url_for('admin.company_new'))
+
+    from app.models.company import COMMON_TIMEZONES, BASE_CURRENCY_CHOICES
+    return render_template(
+        'admin/company_form.html',
+        company=None,
+        timezone_choices=COMMON_TIMEZONES,
+        base_currency_choices=BASE_CURRENCY_CHOICES,
+    )
+
+
+@admin_bp.route('/companies/<uuid:company_id>/edit', methods=['GET', 'POST'])
+@superadmin_required
+def company_edit(company_id):
+    company = Company.query.get_or_404(company_id)
+
+    if request.method == 'POST':
+        from app.models.company import COMMON_TIMEZONES, BASE_CURRENCY_CHOICES
+        from zoneinfo import ZoneInfo
+        from app.models.expense import Expense
+
+        name = (request.form.get('name') or '').strip()
+        if not name:
+            flash('El nombre es obligatorio.', 'danger')
+            return redirect(url_for('admin.company_edit', company_id=company.id))
+
+        company.name = name
+        company.rut = (request.form.get('rut') or '').strip() or None
+
+        timezone_value = (request.form.get('timezone') or company.timezone).strip()
+        try:
+            ZoneInfo(timezone_value)
+            company.timezone = timezone_value
+        except Exception:
+            pass
+
+        base_currency_value = (request.form.get('base_currency') or company.base_currency).strip().upper()
+        if base_currency_value in BASE_CURRENCY_CHOICES and base_currency_value != company.base_currency:
+            has_expenses = db.session.query(Expense.id).filter_by(company_id=company.id).limit(1).first() is not None
+            if has_expenses:
+                flash(f'No se puede cambiar la moneda base: "{company.name}" ya tiene gastos en {company.base_currency}.', 'danger')
+            else:
+                company.base_currency = base_currency_value
+
+        db.session.commit()
+        from app.services.audit_service import log_action
+        log_action('company_updated', entity_type='company', entity_id=company.id,
+                   description=f'Empresa "{company.name}" actualizada.')
+        flash('Empresa actualizada.', 'success')
+        return redirect(url_for('admin.companies'))
+
+    from app.models.company import COMMON_TIMEZONES, BASE_CURRENCY_CHOICES
+    return render_template(
+        'admin/company_form.html',
+        company=company,
+        timezone_choices=COMMON_TIMEZONES,
+        base_currency_choices=BASE_CURRENCY_CHOICES,
+    )
