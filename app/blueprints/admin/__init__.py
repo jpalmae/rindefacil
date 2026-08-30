@@ -3,7 +3,7 @@ import time
 from functools import wraps
 from urllib.parse import urlparse
 
-from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from app.services.email_service import get_company_email_settings_view, send_test_email
 from app.services.secrets_service import can_encrypt_settings, encrypt_setting
 from app.services.ocr_settings_service import (
+    get_company_ocr_config,
     get_company_ocr_config_view,
     test_ocr_connection,
     local_provider_presets,
@@ -822,6 +823,54 @@ def ocr_settings_test():
     else:
         flash(f'No se pudo conectar: {message}', 'danger')
     return redirect(url_for('admin.ocr_settings'))
+
+
+@admin_bp.route('/ocr-settings/models')
+def ocr_settings_models():
+    """Lista los modelos disponibles en el proveedor OCR (OpenRouter o local)."""
+    import requests as _requests
+
+    provider = (request.args.get('provider') or '').strip().lower()
+    try:
+        if provider == 'openrouter':
+            config = get_company_ocr_config(current_user.company)
+            api_key = config.get('api_key') if config else None
+            headers = {}
+            if api_key:
+                headers['Authorization'] = f'Bearer {api_key}'
+            resp = _requests.get('https://openrouter.ai/api/v1/models', headers=headers, timeout=15)
+            resp.raise_for_status()
+            payload = resp.json() or {}
+            models = [
+                {'id': m.get('id', ''), 'name': (m.get('name') or m.get('id', ''))}
+                for m in (payload.get('data') or [])
+            ]
+            models.sort(key=lambda m: m['id'])
+            return jsonify({'ok': True, 'models': models})
+
+        if provider == 'local':
+            base_url = (request.args.get('base_url') or '').strip().rstrip('/')
+            if not base_url:
+                return jsonify({'ok': False, 'error': 'Falta base_url'}), 400
+            config = get_company_ocr_config(current_user.company)
+            api_key = (config or {}).get('api_key') if (config or {}).get('provider') == 'local' else None
+            headers = {}
+            if api_key:
+                headers['Authorization'] = f'Bearer {api_key}'
+            resp = _requests.get(f'{base_url}/models', headers=headers, timeout=10)
+            resp.raise_for_status()
+            payload = resp.json() or {}
+            models = [
+                {'id': m.get('id', ''), 'name': m.get('id', '')}
+                for m in (payload.get('data') or [])
+            ]
+            models.sort(key=lambda m: m['id'])
+            return jsonify({'ok': True, 'models': models})
+
+        return jsonify({'ok': False, 'error': 'Proveedor inválido'}), 400
+    except Exception as exc:
+        current_app.logger.warning('ocr_settings_models error: %s', exc)
+        return jsonify({'ok': False, 'error': str(exc)}), 502
 
 
 # ---------------------------------------------------------------------------
