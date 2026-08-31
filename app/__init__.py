@@ -78,6 +78,7 @@ def create_app(config_name=None):
         brand_default_domain = ''
         brand_theme = 'executive'
         currency_symbol = '$'
+        base_currency = 'CLP'
         switcher_companies = []
         if current_user.is_authenticated:
             notifications_q = Notification.query.filter_by(user_id=current_user.id)
@@ -95,6 +96,7 @@ def create_app(config_name=None):
                 or ''
             )
             currency_symbol = current_user.company.currency_symbol if current_user.company else '$'
+            base_currency = current_user.company.base_currency if current_user.company else 'CLP'
 
             # Otras cuentas del mismo email (para el switcher de empresa).
             switcher_companies = [
@@ -129,6 +131,7 @@ def create_app(config_name=None):
             brand_default_domain=brand_default_domain,
             brand_theme=brand_theme,
             currency_symbol=currency_symbol,
+            base_currency=base_currency,
             switcher_companies=switcher_companies,
         )
 

@@ -14,12 +14,12 @@
         <div class="card bg-white border-l-4 border-gray-400">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Pdte. Rendir</h3>
             <p class="text-3xl font-black text-gray-900 mt-2">{{ currency_symbol }}{{ "{:,.0f}".format(total_draft) }}</p>
-            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
+            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base {{ base_currency }}</p>
         </div>
         <div class="card bg-white border-l-4 border-success">
             <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest leading-none mb-2">Aprobados Mes</h3>
             <p class="text-3xl font-black text-gray-900 mt-2">{{ currency_symbol }}{{ "{:,.0f}".format(total_approved) }}</p>
-            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base CLP</p>
+            <p class="mt-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Base {{ base_currency }}</p>
         </div>
         <div
             class="card bg-primary text-white shadow-lg shadow-primary/30 flex items-center justify-between group overflow-hidden relative">

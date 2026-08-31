@@ -90,6 +90,40 @@
 
             <!-- Aprobadores: Botones Aprobar/Rechazar (Solo si toca en el flujo) -->
             {% if can_approve_now %}
+            <!-- Solicitar Antecedentes: botón directo (además del del modal) -->
+            <div x-data="{ open: false }" class="w-full sm:w-auto">
+                <button @click="open = true"
+                    class="btn border-amber-200 text-amber-700 hover:bg-amber-50 w-full sm:w-auto shadow-md">
+                    <span class="i-heroicons-document-magnifying-glass mr-2"></span> Solicitar Antecedentes
+                </button>
+                <div x-show="open"
+                    class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+                    x-cloak>
+                    <div @click.away="open = false"
+                        class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                        <h2 class="text-xl font-bold text-gray-900 mb-2 flex items-center">
+                            <span class="i-heroicons-document-magnifying-glass text-amber-600 mr-2"></span>
+                            Solicitar Antecedentes
+                        </h2>
+                        <p class="text-sm text-gray-600 mb-4">
+                            La rendición quedará en <strong>Antecedentes Solicitados</strong> y volverá a este mismo
+                            paso cuando el solicitante responda.
+                        </p>
+                        <form method="POST" action="{{ url_for('reports.request_info', id=report.id) }}">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Qué se le solicita al rendidor</label>
+                            <textarea name="comment" class="input w-full h-24 mb-5" required
+                                placeholder="Ej: favor indicar el usuario/cliente/proyecto asociado a cada gasto."></textarea>
+                            <div class="flex justify-end gap-3">
+                                <button type="button" @click="open = false" class="btn border-gray-200 text-gray-600 hover:bg-gray-50">Cancelar</button>
+                                <button type="submit" class="btn border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 font-bold">
+                                    Enviar Solicitud
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
             <div x-data="{ open: false }" class="w-full sm:w-auto">
                 <button @click="open = true" class="btn bg-success text-white hover:bg-success-dark w-full shadow-md">
                     <span class="i-heroicons-check-circle mr-2"></span> Gestionar Aprobación
@@ -142,13 +176,11 @@
             </form>
             {% endif %}
 
-            <!-- Botón Exportar PDF -->
-            {% if report.status in ['approved', 'paid'] %}
+            <!-- Botón Exportar PDF: visible para cualquier estado (rendidor y aprobador) -->
             <a href="{{ url_for('reports.export_pdf', id=report.id) }}"
                 class="btn-outline shadow-md w-full md:w-auto mt-2 md:mt-0">
-                <span class="i-heroicons-document-arrow-down mr-2"></span> PDF
+                <span class="i-heroicons-document-arrow-down mr-2"></span> Descargar PDF
             </a>
-            {% endif %}
         </div>
     </div>
 
@@ -203,7 +235,7 @@
     <!-- Summary Widgets -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 border-l-4 border-primary">
-            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto (CLP)</p>
+            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total Gasto ({{ base_currency }})</p>
             <p class="text-2xl font-black text-primary mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(report.total_amount) }}</p>
         </div>
         <div class="card p-4">
