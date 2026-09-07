@@ -67,9 +67,28 @@
                     <input type="hidden" name="_provider_fallback" value="">
                 </div>
 
+                <!-- Fallback provider -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Si el primario falla, usar:
+                    </label>
+                    <select name="ocr_fallback_provider" id="ocr_fallback_provider" class="input">
+                        <option value="" {% if not fallback_provider %}selected{% endif %}>Ninguno (sin fallback)</option>
+                        <option value="openrouter" {% if fallback_provider == 'openrouter' %}selected{% endif %}>OpenRouter (cloud)</option>
+                        <option value="local" {% if fallback_provider == 'local' %}selected{% endif %}>Local / OpenAI-compatible</option>
+                    </select>
+                    <p class="text-[11px] text-gray-400 mt-1">
+                        Se intenta solo si el primario agotó todos sus modelos sin resultado.
+                        El circuit breaker salta providers con 3+ fallos consecutivos por 5 min.
+                    </p>
+                </div>
+
                 <!-- ============ OpenRouter ============ -->
                 <div id="section-openrouter" class="space-y-4 pt-4 border-t border-gray-100">
-                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">OpenRouter (cloud)</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">OpenRouter (cloud)</h3>
+                        <span id="badge-openrouter" class="hidden text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"></span>
+                    </div>
                     <p class="text-xs text-gray-500 -mt-2">Sin URL que configurar: el proveedor es fijo. Solo necesitas tu API key.</p>
 
                     <div>
@@ -119,7 +138,10 @@
 
                 <!-- ============ Local / OpenAI-compatible ============ -->
                 <div id="section-local" class="space-y-4 pt-4 border-t border-gray-100">
-                    <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Servidor OpenAI-compatible</h3>
+                    <div class="flex items-center gap-2">
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wide">Servidor OpenAI-compatible</h3>
+                        <span id="badge-local" class="hidden text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full"></span>
+                    </div>
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">URL del servidor (base_url) <span class="text-danger">*</span></label>
@@ -234,7 +256,46 @@ function toggleProviderSections() {
     document.getElementById('section-local').classList.toggle('hidden', provider !== 'local');
     document.getElementById('tab-openrouter').classList.toggle('border-primary', provider === 'openrouter');
     document.getElementById('tab-local').classList.toggle('border-primary', provider === 'local');
+    updateBadges(provider);
+    updateFallbackOptions(provider);
 }
+
+function updateBadges(provider) {
+    const fb = document.getElementById('ocr_fallback_provider').value;
+    const setBadge = (id, isPrimary, isFallback) => {
+        const el = document.getElementById(id);
+        if (isPrimary) {
+            el.textContent = 'Primario';
+            el.className = 'text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-primary text-white';
+            el.classList.remove('hidden');
+        } else if (isFallback) {
+            el.textContent = 'Fallback';
+            el.className = 'text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full bg-amber-100 text-amber-800';
+            el.classList.remove('hidden');
+        } else {
+            el.classList.add('hidden');
+        }
+    };
+    setBadge('badge-openrouter', provider === 'openrouter', fb === 'openrouter');
+    setBadge('badge-local', provider === 'local', fb === 'local');
+}
+
+function updateFallbackOptions(provider) {
+    const sel = document.getElementById('ocr_fallback_provider');
+    for (const opt of sel.options) {
+        if (opt.value && opt.value === provider) {
+            opt.disabled = true;
+            if (sel.value === provider) sel.value = '';
+        } else {
+            opt.disabled = false;
+        }
+    }
+}
+
+document.getElementById('ocr_fallback_provider').addEventListener('change', function() {
+    const checked = document.querySelector('input[name="ocr_provider"]:checked');
+    updateBadges(checked ? checked.value : 'openrouter');
+});
 
 function restorePrompt(kind) {
     if (!confirm('¿Restaurar el prompt recomendado? Se reemplazará el texto actual.')) return;

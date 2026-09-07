@@ -3,11 +3,48 @@ import json
 import base64
 import re
 import tempfile
+import time
 import imagehash
 from PIL import Image
 from openai import OpenAI
 from flask import current_app
 import pypdfium2 as pdfium
+
+
+# ---------------------------------------------------------------------------
+# Circuit breaker por provider (en memoria, por worker)
+# ---------------------------------------------------------------------------
+BREAKER_THRESHOLD = 3
+BREAKER_COOLDOWN_SECONDS = 300
+
+_provider_breaker = {}  # key -> {'failures': int, 'open_until': float}
+
+
+def _breaker_key(config):
+    return f"{config.get('provider', '?')}:{config.get('base_url', '')}"
+
+
+def _breaker_is_open(key):
+    state = _provider_breaker.get(key)
+    if not state:
+        return False
+    return bool(state.get('open_until')) and time.time() < state['open_until']
+
+
+def _breaker_record(key, success):
+    state = _provider_breaker.setdefault(key, {'failures': 0, 'open_until': 0.0})
+    if success:
+        state['failures'] = 0
+        state['open_until'] = 0.0
+        return
+    state['failures'] += 1
+    if state['failures'] >= BREAKER_THRESHOLD:
+        state['open_until'] = time.time() + BREAKER_COOLDOWN_SECONDS
+        state['failures'] = 0
+        current_app.logger.warning(
+            'OCR circuit breaker OPEN para %s (%ss): el provider lleva fallos consecutivos.',
+            key, BREAKER_COOLDOWN_SECONDS,
+        )
 
 
 def _extract_json_payload(raw_content):
@@ -97,23 +134,14 @@ def _run_inference(client, model, prompt, base64_image, mime_type, timeout):
     return response.choices[0].message.content
 
 
-def extract_expense_data(image_path, config_override=None):
+def _try_single_provider(config, base64_image, mime_type):
+    """Intenta UN provider (modelo primario + fallback dentro del provider).
+
+    Devuelve el dict parseado o None. Registra en el circuit breaker.
     """
-    Extrae datos de un recibo usando IA (OpenRouter o servidor local OpenAI-compatible).
-
-    - config_override: si se pasa, usa esa config (dict con base_url, api_key,
-      model, model_fallback, timeout, prompt). Si no, resuelve desde la empresa
-      del usuario actual o, en último término, desde variables de entorno.
-    """
-    from app.services.ocr_settings_service import get_company_ocr_config
-
-    if config_override is not None:
-        config = config_override
-    else:
-        config = get_company_ocr_config()
-
-    if not config or not config.get('enabled'):
-        current_app.logger.info('OCR deshabilitado o sin configurar. Skip.')
+    key = _breaker_key(config)
+    if _breaker_is_open(key):
+        current_app.logger.info('OCR breaker abierto, saltando %s directo.', key)
         return None
 
     base_url = config.get('base_url')
@@ -124,10 +152,54 @@ def extract_expense_data(image_path, config_override=None):
     fallback_model = config.get('model_fallback')
 
     if not base_url or not primary_model:
-        current_app.logger.warning('OCR config incompleta (falta base_url o modelo). Skip.')
+        current_app.logger.warning('OCR config incompleta para %s (falta base_url o modelo).', config.get('provider'))
+        _breaker_record(key, False)
         return None
 
     client = OpenAI(base_url=base_url, api_key=api_key)
+    models_to_try = [m for m in [primary_model, fallback_model] if m]
+    last_error = None
+    for model in models_to_try:
+        try:
+            content = _run_inference(client, model, prompt, base64_image, mime_type, timeout)
+            parsed = _extract_json_payload(content)
+            if parsed is not None:
+                _breaker_record(key, True)
+                return parsed
+            last_error = 'Respuesta sin JSON parseable'
+            current_app.logger.warning("OCR model %s devolvió respuesta sin JSON.", model)
+        except Exception as exc:
+            last_error = str(exc)
+            current_app.logger.warning("OCR model %s falló: %s", model, exc)
+            continue
+
+    _breaker_record(key, False)
+    if last_error:
+        current_app.logger.error("OCR provider %s agotó modelos. Último error: %s", config.get('provider'), last_error)
+    return None
+
+
+def extract_expense_data(image_path, config_override=None):
+    """
+    Extrae datos de un recibo usando IA. Cadena: primario → fallback.
+
+    Cada provider intenta su modelo primario y luego su modelo fallback.
+    Si todo el primario falla y hay fallback configurado, se intenta el
+    segundo provider. El circuit breaker saltea providers con fallos
+    consecutivos recientes.
+    """
+    from app.services.ocr_settings_service import get_company_ocr_config, get_company_ocr_fallback_config
+
+    if config_override is not None:
+        config = config_override
+        fallback_config = None
+    else:
+        config = get_company_ocr_config()
+        fallback_config = get_company_ocr_fallback_config()
+
+    if not config or not config.get('enabled'):
+        current_app.logger.info('OCR deshabilitado o sin configurar. Skip.')
+        return None
 
     temp_image_path = None
     try:
@@ -144,23 +216,28 @@ def extract_expense_data(image_path, config_override=None):
         file_ext = os.path.splitext(source_path)[1].lower()
         mime_type = "image/png" if file_ext == '.png' else "image/jpeg"
 
-        models_to_try = [m for m in [primary_model, fallback_model] if m]
-        last_error = None
-        for model in models_to_try:
-            try:
-                content = _run_inference(client, model, prompt, base64_image, mime_type, timeout)
-                parsed = _extract_json_payload(content)
-                if parsed is not None:
-                    return parsed
-                last_error = 'Respuesta sin JSON parseable'
-                current_app.logger.warning("OCR model %s devolvió respuesta sin JSON.", model)
-            except Exception as exc:
-                last_error = str(exc)
-                current_app.logger.warning("OCR model %s falló: %s", model, exc)
-                continue
+        # 1) Provider primario
+        result = _try_single_provider(config, base64_image, mime_type)
+        if result is not None:
+            current_app.logger.info('ocr: primary=%s OK', config.get('provider'))
+            return result
 
-        if last_error:
-            current_app.logger.error("OCR agotó modelos disponibles. Último error: %s", last_error)
+        # 2) Provider fallback (si está configurado y el primario falló)
+        if fallback_config:
+            current_app.logger.warning(
+                'ocr: primary=%s FAIL → probando fallback=%s',
+                config.get('provider'), fallback_config.get('provider'),
+            )
+            result = _try_single_provider(fallback_config, base64_image, mime_type)
+            if result is not None:
+                current_app.logger.info('ocr: primary=%s FAIL → fallback=%s OK',
+                                        config.get('provider'), fallback_config.get('provider'))
+                return result
+            current_app.logger.error('ocr: ALL FAIL (primary=%s, fallback=%s)',
+                                     config.get('provider'), fallback_config.get('provider'))
+        else:
+            current_app.logger.error('ocr: primary=%s FAIL (sin fallback configurado)',
+                                     config.get('provider'))
         return None
 
     except Exception as e:

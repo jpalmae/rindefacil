@@ -90,7 +90,7 @@ def _config_from_env():
 
 
 def get_company_ocr_config(company=None):
-    """Resuelve la configuración OCR efectiva.
+    """Resuelve la configuración OCR efectiva (provider primario).
 
     Orden: company.settings > env vars (OPENROUTER_*) > None.
     """
@@ -99,7 +99,11 @@ def get_company_ocr_config(company=None):
         return _config_from_env()
 
     provider = (settings.get('ocr_provider') or OCR_PROVIDER_OPENROUTER).strip().lower()
+    return _build_provider_config(settings, provider)
 
+
+def _build_provider_config(settings, provider):
+    """Construye la config de UN provider (openrouter o local) desde settings."""
     if provider == OCR_PROVIDER_LOCAL:
         timeout_raw = settings.get('ocr_local_timeout') or OCR_DEFAULT_TIMEOUT_SECONDS
         try:
@@ -132,6 +136,37 @@ def get_company_ocr_config(company=None):
         'prompt': settings.get('ocr_openrouter_prompt') or DEFAULT_CLOUD_PROMPT,
         'source': 'company',
     }
+
+
+def get_company_ocr_fallback_config(company=None):
+    """Resuelve la config del provider FALLBACK (o None si no está activado).
+
+    El fallback es mutuamente excluyente con el primario: si
+    ocr_fallback_provider == ocr_provider, se ignora (no tiene sentido
+    reintentar el mismo provider que ya falló).
+    """
+    settings = _company_settings(company)
+    if not settings.get('ocr_enabled'):
+        return None
+
+    fallback_provider = (settings.get('ocr_fallback_provider') or '').strip().lower()
+    if not fallback_provider or fallback_provider not in (OCR_PROVIDER_OPENROUTER, OCR_PROVIDER_LOCAL):
+        return None
+
+    primary = (settings.get('ocr_provider') or OCR_PROVIDER_OPENROUTER).strip().lower()
+    if fallback_provider == primary:
+        return None
+
+    config = _build_provider_config(settings, fallback_provider)
+    config['role'] = 'fallback'
+
+    # El fallback necesita credenciales válidas para tener sentido
+    if fallback_provider == OCR_PROVIDER_OPENROUTER and not config['api_key']:
+        return None
+    if fallback_provider == OCR_PROVIDER_LOCAL and not config['base_url']:
+        return None
+
+    return config
 
 
 def get_company_ocr_config_view(company):
@@ -254,8 +289,13 @@ def make_test_image_bytes():
 
 
 def test_ocr_connection(company):
-    """Ejecuta una inferencia mínima y devuelve (ok, message, parsed_data)."""
-    from app.services.ocr_service import extract_expense_data
+    """Ejecuta una inferencia mínima y devuelve (ok, message, parsed_data).
+
+    Prueba la cadena completa: primario → fallback (si configurado).
+    """
+    import base64 as b64mod
+    import tempfile
+    from app.services.ocr_service import _try_single_provider
 
     config = get_company_ocr_config(company)
     if not config:
@@ -268,25 +308,43 @@ def test_ocr_connection(company):
     if not config.get('model'):
         return False, 'Falta nombre del modelo.', None
 
+    fallback_config = get_company_ocr_fallback_config(company)
+
     image_bytes = make_test_image_bytes()
     tmp_path = None
     try:
-        import tempfile
         with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
             tmp.write(image_bytes)
             tmp_path = tmp.name
 
-        result = extract_expense_data(tmp_path, config_override=config)
-        if result is None:
-            return (
-                False,
-                'El servidor respondió pero no se pudo parsear JSON. '
-                'Verifica que el modelo soporte visión y que el prompt sea válido.',
-                None,
-            )
-        return True, f"OK. Respuesta recibida del modelo {config['model']}.", result
+        with open(tmp_path, 'rb') as f:
+            base64_image = b64mod.b64encode(f.read()).decode('utf-8')
+
+        # 1) Primario
+        result = _try_single_provider(config, base64_image, 'image/png')
+        if result is not None:
+            return True, f'OK. Modelo {config["model"]} respondió correctamente.', result
+
+        # 2) Fallback
+        if fallback_config:
+            result = _try_single_provider(fallback_config, base64_image, 'image/png')
+            if result is not None:
+                return (
+                    True,
+                    f'OK vía fallback ({fallback_config["provider"]}, modelo {fallback_config["model"]}). '
+                    f'El primario ({config["provider"]}) falló.',
+                    result,
+                )
+
+        return (
+            False,
+            f'La cadena completa falló (primario: {config["provider"]}'
+            + (f' + fallback: {fallback_config["provider"]}' if fallback_config else ', sin fallback')
+            + '). Revisa URLs, API keys y que el modelo soporte visión.',
+            None,
+        )
     except Exception as exc:
-        return False, f'Error al contactar el servidor: {exc}', None
+        return False, f'Error al ejecutar test: {exc}', None
     finally:
         if tmp_path and os.path.exists(tmp_path):
             try:

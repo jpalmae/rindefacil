@@ -751,8 +751,15 @@ def ocr_settings():
         if provider not in ('openrouter', 'local'):
             provider = 'openrouter'
 
+        fallback_provider = (request.form.get('ocr_fallback_provider') or '').strip().lower()
+        if fallback_provider not in ('openrouter', 'local'):
+            fallback_provider = ''
+        if fallback_provider == provider:
+            fallback_provider = ''  # mutuamente excluyente
+
         settings['ocr_enabled'] = enabled
         settings['ocr_provider'] = provider
+        settings['ocr_fallback_provider'] = fallback_provider
 
         # OpenRouter
         settings['ocr_openrouter_model'] = (request.form.get('openrouter_model') or '').strip() or OCR_DEFAULT_CLOUD_MODEL
@@ -809,6 +816,7 @@ def ocr_settings():
         default_cloud_prompt=DEFAULT_CLOUD_PROMPT,
         default_local_prompt=DEFAULT_LOCAL_PROMPT,
         can_encrypt=can_encrypt_settings(),
+        fallback_provider=(company.settings or {}).get('ocr_fallback_provider') or '',
     )
 
 
