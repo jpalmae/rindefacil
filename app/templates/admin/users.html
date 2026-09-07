@@ -97,12 +97,21 @@
                             </div>
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap">
-                            {% if u.role == 'admin' %}
+                            {% if u.role == 'superadmin' %}
+                            <span
+                                class="badge border border-purple-200 bg-purple-50 text-purple-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Superadmin</span>
+                            {% elif u.role == 'admin' %}
                             <span
                                 class="badge border border-blue-200 bg-blue-50 text-blue-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Admin</span>
                             {% elif u.role == 'manager' %}
                             <span
                                 class="badge border border-indigo-200 bg-indigo-50 text-indigo-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Manager</span>
+                            {% elif u.role == 'approver' %}
+                            <span
+                                class="badge border border-teal-200 bg-teal-50 text-teal-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Aprobador</span>
+                            {% elif u.role == 'reviewer' %}
+                            <span
+                                class="badge border border-cyan-200 bg-cyan-50 text-cyan-700 uppercase tracking-tighter text-[9px] px-2 py-0.5">Revisor</span>
                             {% else %}
                             <span
                                 class="badge border border-gray-200 bg-gray-50 text-gray-600 uppercase tracking-tighter text-[9px] px-2 py-0.5">Empleado</span>

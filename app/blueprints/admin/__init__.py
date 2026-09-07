@@ -203,7 +203,9 @@ def user_edit(user_id):
     if request.method == 'POST':
         user.full_name = request.form.get('full_name')
         user.email = _normalize_user_email(request.form.get('email'), default_user_domain)
-        user.role = request.form.get('role')
+        # superadmin no se degrada desde el formulario (el select no lo ofrece)
+        if user.role != 'superadmin':
+            user.role = request.form.get('role')
         user.manager_id = request.form.get('manager_id') if request.form.get('manager_id') else None
         user.cost_center_id = request.form.get('cost_center_id') if request.form.get('cost_center_id') else None
         (

@@ -43,6 +43,14 @@
                 <div class="space-y-2">
                     <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Rol del
                         Sistema</label>
+                    {% if user and user.role == 'superadmin' %}
+                    <select name="role" disabled
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl bg-gray-50">
+                        <option value="superadmin" selected>Superadmin (protegido)</option>
+                    </select>
+                    <p class="text-[10px] text-gray-400 italic">El rol superadmin solo se gestiona a nivel de base de
+                        datos.</p>
+                    {% else %}
                     <select name="role"
                         class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl">
                         <option value="employee" {% if user and user.role=='employee' %}selected{% endif %}>Empleado
@@ -52,6 +60,7 @@
                         <option value="admin" {% if user and user.role=='admin' %}selected{% endif %}>Administrador
                         </option>
                     </select>
+                    {% endif %}
                 </div>
                 <div class="space-y-2">
                     <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Reporta a
