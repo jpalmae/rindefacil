@@ -530,9 +530,22 @@ def profile():
     if request.method == 'POST':
         full_name = request.form.get('full_name')
         password = request.form.get('password')
-        
+
         current_user.full_name = full_name
-        
+
+        phone = User.normalize_phone(request.form.get('phone'))
+        if request.form.get('phone') and not phone:
+            db.session.rollback()
+            flash('Número de celular no válido. Usa formato internacional sin espacios (ej: 56912345678).', 'danger')
+            return redirect(url_for('auth.profile'))
+        if phone != (current_user.phone or None):
+            current_user.phone = phone
+            from app.models.whatsapp import WhatsappSession
+            WhatsappSession.query.filter(
+                WhatsappSession.user_id == current_user.id,
+                WhatsappSession.phone != (current_user.phone or ''),
+            ).delete(synchronize_session=False)
+
         if password:
             current_user.set_password(password)
             current_user.must_change_password = False

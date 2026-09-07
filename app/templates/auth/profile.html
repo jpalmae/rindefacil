@@ -129,6 +129,13 @@
                                 <input type="email" value="{{ current_user.email }}"
                                     class="input bg-gray-50 cursor-not-allowed" disabled>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Celular (WhatsApp)</label>
+                                <input type="tel" name="phone" value="{{ current_user.phone or '' }}" class="input"
+                                    placeholder="56912345678">
+                                <p class="text-xs text-gray-400 mt-1">Formato internacional sin '+' ni espacios.
+                                    Con él puedes rendir gastos por WhatsApp con el agente de {{ brand_app_name }}.</p>
+                            </div>
                         </div>
 
                         <div>

@@ -30,6 +30,13 @@
                     <p class="text-[10px] text-gray-400 italic">Si escribes solo el alias, se agrega @{{ user_default_domain }} automáticamente.</p>
                     {% endif %}
                 </div>
+                <div class="space-y-2">
+                    <label class="block text-sm font-bold text-gray-700 uppercase tracking-widest">Celular (WhatsApp)</label>
+                    <input type="tel" name="phone" value="{{ user.phone if user else '' }}"
+                        class="input focus:ring-primary focus:border-primary block w-full sm:text-sm border-gray-300 rounded-xl"
+                        placeholder="56912345678">
+                    <p class="text-[10px] text-gray-400 italic">Formato internacional sin '+' ni espacios. Habilita el agente de WhatsApp.</p>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

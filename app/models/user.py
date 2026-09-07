@@ -35,6 +35,7 @@ class User(UserMixin, db.Model):
     mfa_enabled = db.Column(db.Boolean, nullable=False, default=False)
     oidc_subject = db.Column(db.String(255), nullable=True, index=True)
     auth_source = db.Column(db.String(32), nullable=False, default='local')
+    phone = db.Column(db.String(20), nullable=True, index=True)  # E.164 sin '+', ej: 56912345678
     avatar_url = db.Column(db.String(500))
     signature_url = db.Column(db.String(500))
     is_active = db.Column(db.Boolean, default=True)
@@ -87,6 +88,17 @@ class User(UserMixin, db.Model):
 
     def has_role(self, role_name):
         return self.role == role_name
+
+    @staticmethod
+    def normalize_phone(raw):
+        """Normaliza a E.164 sin '+' (solo dígitos). None si es inválido."""
+        import re as _re
+        digits = _re.sub(r'\D', '', str(raw or ''))
+        if not digits:
+            return None
+        if not (8 <= len(digits) <= 15):
+            return None
+        return digits
 
     def __repr__(self):
         return f'<User {self.email}>'

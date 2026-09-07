@@ -816,6 +816,35 @@ def categories_list():
     ])
 
 
+@api_bp.route("/expenses/exchange-rate", methods=["GET"])
+@api_auth_required
+def expenses_exchange_rate():
+    """Tasa de cambio USD → moneda base de la empresa (misma fuente que la web)."""
+    user = g.api_user
+    base_currency = (user.company.base_currency or ExpenseCurrency.CLP)
+    rate_date = _parse_date(request.args.get("date")) or date.today()
+
+    from app.services.exchange_rate_service import get_usd_rate_for_base
+    rate = get_usd_rate_for_base(rate_date, base_currency)
+    if not rate:
+        return _error(
+            f"No se pudo obtener la tasa USD->{base_currency} para {rate_date.isoformat()}.",
+            status=503,
+            code="exchange_rate_unavailable",
+        )
+
+    return jsonify({
+        "ok": True,
+        "data": {
+            "base_currency": base_currency,
+            "exchange_rate": float(rate["exchange_rate"]),
+            "source": rate["source"],
+            "source_detail": rate["source_detail"],
+            "date": rate_date.isoformat(),
+        },
+    })
+
+
 @api_bp.route("/expenses/analyze", methods=["POST"])
 @api_auth_required
 def analyze_expense_receipt():
@@ -980,12 +1009,18 @@ def expenses_create():
             code="validation_error",
         )
 
-    if currency == ExpenseCurrency.USD and (exchange_rate is None or exchange_rate <= 0):
-        return _error(
-            "Debes enviar exchange_rate valido para gastos en USD.",
-            status=422,
-            code="validation_error",
-        )
+    if currency != base_currency and (exchange_rate is None or exchange_rate <= 0):
+        # Autocompletar la tasa como lo hace la web (mindicador/CMF/er-api)
+        from app.services.exchange_rate_service import get_usd_rate_for_base
+        auto_rate_date = date_value or date.today()
+        auto_rate = get_usd_rate_for_base(auto_rate_date, base_currency)
+        exchange_rate = auto_rate["exchange_rate"] if auto_rate else None
+        if exchange_rate is None or exchange_rate <= 0:
+            return _error(
+                f"No pude obtener el tipo de cambio {currency}->{base_currency} automaticamente. Envia exchange_rate valido.",
+                status=422,
+                code="validation_error",
+            )
 
     if currency == base_currency:
         exchange_rate = Decimal("1")

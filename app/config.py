@@ -48,6 +48,11 @@ class Config:
     CMF_API_KEY = os.environ.get('CMF_API_KEY')
     SETTINGS_ENCRYPTION_KEY = os.environ.get('SETTINGS_ENCRYPTION_KEY')
 
+    # Kapso (WhatsApp)
+    KAPSO_API_KEY = os.environ.get('KAPSO_API_KEY')
+    KAPSO_PHONE_NUMBER_ID = os.environ.get('KAPSO_PHONE_NUMBER_ID')
+    KAPSO_WEBHOOK_SECRET = os.environ.get('KAPSO_WEBHOOK_SECRET')
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

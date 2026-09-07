@@ -100,6 +100,17 @@ def ensure_admin():
 def index():
     return render_template('admin/index.html')
 
+
+def _invalidate_stale_whatsapp_sessions(user):
+    """Al cambiar el teléfono, las sesiones de WhatsApp con otro número
+    apuntando a este usuario quedan obsoletas."""
+    from app.models.whatsapp import WhatsappSession
+    WhatsappSession.query.filter(
+        WhatsappSession.user_id == user.id,
+        WhatsappSession.phone != (user.phone or ''),
+    ).delete(synchronize_session=False)
+
+
 @admin_bp.route('/users')
 def users():
     search = (request.args.get('q') or '').strip()
@@ -130,6 +141,10 @@ def user_new():
         manager_id = request.form.get('manager_id')
         cost_center_id = request.form.get('cost_center_id')
         can_view_approved_reports, can_mark_reimbursements_paid = _finance_permissions_from_form(request.form)
+        phone = User.normalize_phone(request.form.get('phone'))
+        if request.form.get('phone') and not phone:
+            flash('Número de celular no válido. Usa formato internacional sin espacios (ej: 56912345678).', 'danger')
+            return redirect(url_for('admin.user_new'))
 
         if '@' not in email:
             flash('Debes ingresar un email válido o configurar dominio por defecto.', 'danger')
@@ -149,6 +164,7 @@ def user_new():
             cost_center_id=cost_center_id if cost_center_id else None,
             can_view_approved_reports=can_view_approved_reports,
             can_mark_reimbursements_paid=can_mark_reimbursements_paid,
+            phone=phone,
             must_change_password=True,
         )
         user.set_password(password)
@@ -194,6 +210,14 @@ def user_edit(user_id):
             user.can_view_approved_reports,
             user.can_mark_reimbursements_paid,
         ) = _finance_permissions_from_form(request.form)
+
+        phone = User.normalize_phone(request.form.get('phone'))
+        if request.form.get('phone') and not phone:
+            flash('Número de celular no válido. Usa formato internacional sin espacios (ej: 56912345678).', 'danger')
+            return redirect(url_for('admin.user_edit', user_id=user_id))
+        if phone != (user.phone or None):
+            user.phone = phone
+            _invalidate_stale_whatsapp_sessions(user)
 
         if '@' not in user.email:
             flash('Debes ingresar un email válido o configurar dominio por defecto.', 'danger')

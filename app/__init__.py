@@ -52,6 +52,7 @@ def create_app(config_name=None):
     from app.blueprints.reports import reports_bp
     from app.blueprints.admin import admin_bp
     from app.blueprints.api import api_bp
+    from app.blueprints.whatsapp_bot import whatsapp_bot_bp
 
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(dashboard_bp)
@@ -59,6 +60,7 @@ def create_app(config_name=None):
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(admin_bp, url_prefix='/admin')
     app.register_blueprint(api_bp, url_prefix='/api/v1')
+    app.register_blueprint(whatsapp_bot_bp)
 
     # Inject common template context once per request to avoid repeated DB work in Jinja
     @app.context_processor
