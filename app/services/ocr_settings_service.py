@@ -181,40 +181,26 @@ def get_company_ocr_config_view(company):
 
     if is_company_managed:
         provider = (settings.get('ocr_provider') or OCR_PROVIDER_OPENROUTER).lower()
-        if provider == OCR_PROVIDER_LOCAL:
-            return {
-                'enabled': True,
-                'provider': provider,
-                'source': 'company',
-                'local_base_url': settings.get('ocr_local_base_url') or '',
-                'local_model': settings.get('ocr_local_model') or '',
-                'local_model_fallback': settings.get('ocr_local_model_fallback') or '',
-                'local_timeout': settings.get('ocr_local_timeout') or OCR_DEFAULT_TIMEOUT_SECONDS,
-                'local_has_api_key': bool(settings.get('ocr_local_api_key')),
-                'local_masked_api_key': _mask(settings.get('ocr_local_api_key')),
-                'local_prompt': settings.get('ocr_local_prompt') or '',
-                'openrouter_model': '',
-                'openrouter_model_fallback': '',
-                'openrouter_prompt': '',
-                'openrouter_has_api_key': False,
-                'openrouter_masked_api_key': '',
-            }
+        # Ambos providers siempre visibles en el form (uno es primario,
+        # el otro puede ser fallback): devolver valores reales de ambos.
         return {
             'enabled': True,
             'provider': provider,
             'source': 'company',
+            # OpenRouter (primario o fallback)
             'openrouter_model': settings.get('ocr_openrouter_model') or '',
             'openrouter_model_fallback': settings.get('ocr_openrouter_model_fallback') or '',
             'openrouter_prompt': settings.get('ocr_openrouter_prompt') or '',
             'openrouter_has_api_key': bool(settings.get('ocr_openrouter_api_key')),
             'openrouter_masked_api_key': _mask(settings.get('ocr_openrouter_api_key')),
-            'local_base_url': '',
-            'local_model': '',
-            'local_model_fallback': '',
-            'local_timeout': OCR_DEFAULT_TIMEOUT_SECONDS,
-            'local_has_api_key': False,
-            'local_masked_api_key': '',
-            'local_prompt': '',
+            # Local (primario o fallback)
+            'local_base_url': settings.get('ocr_local_base_url') or '',
+            'local_model': settings.get('ocr_local_model') or '',
+            'local_model_fallback': settings.get('ocr_local_model_fallback') or '',
+            'local_timeout': settings.get('ocr_local_timeout') or OCR_DEFAULT_TIMEOUT_SECONDS,
+            'local_has_api_key': bool(settings.get('ocr_local_api_key')),
+            'local_masked_api_key': _mask(settings.get('ocr_local_api_key')),
+            'local_prompt': settings.get('ocr_local_prompt') or '',
         }
 
     # Fallback a env vars: lo mostramos como "heredado"
