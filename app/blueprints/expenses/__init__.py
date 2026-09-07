@@ -674,6 +674,13 @@ def extract_data():
         if not data:
             return jsonify({'error': 'No fue posible extraer datos del comprobante. Completa el formulario manualmente.'}), 422
 
+        # Moneda detectada por el OCR: usarla solo si es válida para la empresa
+        ocr_currency = (data.pop('currency', None) or '').strip().upper()
+        if ocr_currency and ocr_currency in current_user.company.allowed_expense_currencies:
+            currency = ocr_currency
+        else:
+            currency = _normalize_currency(request.form.get('currency')) or ExpenseCurrency.CLP
+
         if data.get('amount') is not None:
             parsed_amount = _amount_for_input(data.get('amount'), currency=currency)
             if parsed_amount is not None:
@@ -697,6 +704,9 @@ def extract_data():
         )
         if not has_detected_fields:
             return jsonify({'error': 'No se detectaron campos útiles en la imagen. Puedes completar los datos manualmente.'}), 422
+
+        # Incluir la moneda final para que el form la pre-seleccione
+        data['currency'] = currency
 
         return jsonify({'data': data}), 200
 

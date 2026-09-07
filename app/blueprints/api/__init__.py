@@ -943,6 +943,11 @@ def expenses_create():
         if analyze_receipt:
             ocr_data = extract_expense_data(receipt_path) or {}
             if ocr_data:
+                # Moneda detectada por OCR (si el usuario no la envió explícita)
+                ocr_currency = (ocr_data.get("currency") or "").strip().upper()
+                if not data.get("currency") and ocr_currency and ocr_currency in user.company.allowed_expense_currencies:
+                    currency = ocr_currency
+
                 if amount is None and ocr_data.get("amount") is not None:
                     amount = _parse_amount(ocr_data.get("amount"), currency=currency)
 
