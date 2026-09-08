@@ -834,7 +834,6 @@ def show_approval_detail(session, user, report_id):
             ("appr_act:approve:" + str(report.id), "✅ Aprobar"),
             ("appr_act:reject:" + str(report.id), "❌ Rechazar"),
             ("appr_act:info:" + str(report.id), "ℹ️ Pedir antecedentes"),
-            ("appr_done", "⏭️ Siguiente"),
         ],
         header="Revisar rendición",
     )

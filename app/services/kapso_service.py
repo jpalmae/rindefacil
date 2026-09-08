@@ -73,16 +73,19 @@ def send_text(to, text):
 
 
 def send_buttons(to, body, buttons, header=None, footer=None):
-    """Botones de respuesta rápida. Máximo 3.
+    """Botones de respuesta rápida. Máximo 3 (límite Meta).
 
     buttons: lista de (id, title) — title máx 20 chars.
     """
+    if len(buttons) > 3:
+        current_app.logger.warning("send_buttons con %d botones (máx 3), recortando: %s", len(buttons), [b[1] for b in buttons])
+        buttons = buttons[:3]
     interactive = {
         "type": "button",
         "body": {"text": body},
         "action": {
             "buttons": [
-                {"type": "reply", "reply": {"id": btn_id, "title": title}}
+                {"type": "reply", "reply": {"id": btn_id, "title": title[:20]}}
                 for btn_id, title in buttons
             ]
         },
