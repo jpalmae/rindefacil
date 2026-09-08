@@ -2,20 +2,26 @@
 
 Recibe POST /api/whatsapp/webhook con eventos de Kapso:
 - Verifica firma HMAC-SHA256 (X-Webhook-Signature) contra el body crudo
-- Idempotencia por X-Idempotency-Key (tabla whatsapp_processed_events)
+- Idempotencia doble: por X-Idempotency-Key y por message.id (wamid),
+  reclamada ANTES de despachar (evita dobles-procesos por redelivery o
+  carrera entre workers)
 - Responde 200 inmediatamente y procesa en un thread aparte (límite 10s de Kapso)
 """
 import hashlib
 import hmac
 import threading
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, request
+from sqlalchemy.exc import IntegrityError
 
 from app.extensions import db
 from app.models.whatsapp import WhatsappProcessedEvent
 from app.services.whatsapp_bot_service import handle_incoming_message
 
 whatsapp_bot_bp = Blueprint("whatsapp_bot", __name__, url_prefix="/api/whatsapp")
+
+EVENT_TTL = timedelta(days=7)
 
 
 def _verify_signature(raw_body: bytes, signature: str) -> bool:
@@ -26,19 +32,41 @@ def _verify_signature(raw_body: bytes, signature: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
-def _already_processed(event_key: str) -> bool:
-    existing = db.session.get(WhatsappProcessedEvent, event_key)
-    return existing is not None
+def _keys_for(item, event_key, is_message_event):
+    """Claves de idempotencia: la del evento + el wamid del mensaje."""
+    keys = [f"evt:{event_key}"]
+    if is_message_event:
+        wamid = (item.get("message") or {}).get("id") or ""
+        if wamid:
+            keys.append(f"wa:{wamid}")
+    return keys
 
 
-def _mark_processed(event_key: str):
+def _claim(keys):
+    """Reclama las claves. True = somos los primeros (procesar).
+    False = alguna ya existía (duplicado o carrera con otro worker)."""
+    for key in keys:
+        if db.session.get(WhatsappProcessedEvent, key) is not None:
+            return False
+    for key in keys:
+        db.session.add(WhatsappProcessedEvent(event_key=key))
     try:
-        db.session.add(WhatsappProcessedEvent(event_key=event_key))
+        db.session.commit()
+        return True
+    except IntegrityError:
+        db.session.rollback()
+        return False
+
+
+def _cleanup_old_events():
+    try:
+        cutoff = datetime.now(timezone.utc) - EVENT_TTL
+        WhatsappProcessedEvent.query.filter(
+            WhatsappProcessedEvent.created_at < cutoff
+        ).delete(synchronize_session=False)
         db.session.commit()
     except Exception:
         db.session.rollback()
-        # Duplicate PK en carrera entre workers → ya procesado por otro worker
-        current_app.logger.info("Webhook WhatsApp duplicado (race): %s", event_key)
 
 
 @whatsapp_bot_bp.route("/webhook", methods=["POST"])
@@ -66,29 +94,34 @@ def webhook():
         if not event_key:
             event_key = hashlib.sha256(raw_body + str(index).encode()).hexdigest()
 
-        if _already_processed(event_key):
+        is_message_event = (
+            event_name == "whatsapp.message.received"
+            or item.get("event") == "whatsapp.message.received"
+        )
+
+        keys = _keys_for(item, event_key, is_message_event)
+        if not _claim(keys):
+            current_app.logger.info("Webhook WhatsApp duplicado descartado: %s", keys)
             continue
 
-        if (event_name == "whatsapp.message.received" or item.get("event") == "whatsapp.message.received"):
-            app = current_app._get_current_object()
-            thread = threading.Thread(
-                target=_process_async,
-                args=(app, item, event_key),
-                daemon=True,
-            )
-            thread.start()
-        else:
-            _mark_processed(event_key)
+        if not is_message_event:
+            continue  # reclamar basta para eventos sin mensaje
 
+        app = current_app._get_current_object()
+        threading.Thread(
+            target=_process_async,
+            args=(app, item),
+            daemon=True,
+        ).start()
+
+    _cleanup_old_events()
     return {"ok": True}, 200
 
 
-def _process_async(app, payload, event_key):
+def _process_async(app, payload):
     with app.app_context():
         try:
             handle_incoming_message(payload)
         except Exception:
             current_app.logger.exception("Error en procesamiento async de webhook WhatsApp")
             db.session.rollback()
-        finally:
-            _mark_processed(event_key)

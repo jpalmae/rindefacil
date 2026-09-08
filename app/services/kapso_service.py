@@ -31,7 +31,7 @@ def _headers():
     }
 
 
-def _post_message(payload):
+def _post_message(payload, _retried=False):
     _, phone_number_id = _config()
     response = requests.post(
         f"{KAPSO_BASE_URL}/{phone_number_id}/messages",
@@ -39,6 +39,11 @@ def _post_message(payload):
         json=payload,
         timeout=KAPSO_TIMEOUT,
     )
+    if response.status_code in (409, 429) and not _retried:
+        # mensaje in-flight al mismo destinatario o rate limit: esperar y reintentar una vez
+        import time
+        time.sleep(1.2)
+        return _post_message(payload, _retried=True)
     if response.status_code >= 400:
         current_app.logger.error(
             "Kapso send failed %s: %s | payload_type=%s",

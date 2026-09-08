@@ -73,7 +73,13 @@ REPORT_STATUS_LABELS = {
 # ---------------------------------------------------------------------------
 
 def handle_action(session, user, action_id, title):
-    """Botones/listas del menú principal y de flujos."""
+    """Botones/listas del menú principal y de flujos.
+
+    Las acciones de flujo validan el estado actual: un tap duplicado o un
+    botón viejo (de un mensaje anterior) se ignora en silencio.
+    """
+    state = session.state
+
     if action_id == MENU_ROW_EXPENSE:
         return start_expense(session, user)
     if action_id == MENU_ROW_MY_EXPENSES:
@@ -86,33 +92,51 @@ def handle_action(session, user, action_id, title):
         return show_pending_approvals(session, user)
 
     if action_id == "exp_confirm_ok":
+        if state != EXP_OCR_CONFIRM:
+            return None  # tap duplicado / botón viejo
         return advance_flow(session, user)
     if action_id == "exp_confirm_edit":
+        if state != EXP_OCR_CONFIRM:
+            return None
         return ask_which_field(session, user)
     if action_id == "exp_confirm_cancel":
+        if state not in (EXP_OCR_CONFIRM, EXP_EDIT_FIELD, EXP_AWAIT_LOCATION):
+            return None
         _clear_state(session)
         return send_main_menu(session, greeting="Gasto descartado.")
     if action_id.startswith("exp_edit:"):
+        if state != EXP_OCR_CONFIRM:
+            return None
         return ask_field_value(session, user, action_id.split(":", 1)[1])
     if action_id.startswith("exp_editcat:"):
+        if state != EXP_EDIT_FIELD:
+            return None
         return receive_category(session, user, action_id.split(":", 1)[1])
     if action_id == "rep_settle_reimburse":
+        if state != REP_SETTLEMENT:
+            return None
         session.state_data["settlement_type"] = ReportSettlementType.EMPLOYEE_REIMBURSEMENT
         return confirm_report(session, user)
     if action_id == "rep_settle_card":
+        if state != REP_SETTLEMENT:
+            return None
         session.state_data["settlement_type"] = ReportSettlementType.CORPORATE_CARD
         return confirm_report(session, user)
-    if action_id == "rep_confirm_create":
-        return create_report(session, user)
-    if action_id == "rep_confirm_submit":
-        return create_report(session, user, submit=True)
+    if action_id in ("rep_confirm_create", "rep_confirm_submit"):
+        if state != REP_CONFIRM:
+            return None
+        return create_report(session, user, submit=(action_id == "rep_confirm_submit"))
     if action_id == "rep_confirm_cancel":
+        if state not in (REP_TITLE, REP_SETTLEMENT, REP_CONFIRM):
+            return None
         _clear_state(session)
         return send_main_menu(session, greeting="Rendición descartada.")
     if action_id.startswith("appr_open:"):
         return show_approval_detail(session, user, action_id.split(":", 1)[1])
     if action_id.startswith("appr_act:"):
         _, action, report_id = action_id.split(":", 2)
+        if state != APPR_REASON or session.state_data.get("report_id") != report_id:
+            return None  # decisión ya tomada o botón viejo
         return start_approval_action(session, user, action, report_id)
     if action_id == "appr_done":
         return show_pending_approvals(session, user)
@@ -128,7 +152,9 @@ def handle_text_state(session, user, text):
     if state == REP_TITLE:
         return receive_report_title(session, user, text)
     if state == APPR_REASON:
-        return receive_approval_reason(session, user, text)
+        if session.state_data.get("action"):
+            return receive_approval_reason(session, user, text)
+        return None  # texto suelto mientras se muestra el detalle de aprobación
     if state in (EXP_OCR_CONFIRM, EXP_AWAIT_LOCATION, REP_SETTLEMENT, REP_CONFIRM):
         return kapso_service.send_text(session.phone, "Usa los botones de arriba para continuar, o escribe *cancelar*.")
     return send_main_menu(session)
@@ -379,6 +405,8 @@ def _parse_amount_text(text):
 
 
 def receive_field_value(session, user, text):
+    if session.state != EXP_EDIT_FIELD or not session.state_data.get("field"):
+        return None  # texto tardío de un paso ya completado
     d = _draft(session)
     field = session.state_data.get("field")
     text = (text or "").strip()
@@ -445,10 +473,14 @@ def handle_location(session, user, location):
     d["longitude"] = lon
     d["gps_address"] = (location.get("address") or location.get("name") or "").strip() or None
 
-    # Si no había flujo de gasto activo con datos mínimos, arrancar desde la tarjeta
-    if session.state != EXP_AWAIT_LOCATION or not _has_valid_amount(d):
-        _set_state(session, EXP_OCR_CONFIRM, draft=d)
-        return show_ocr_confirmation(session, user)
+    # Ubicación sin flujo de gasto con monto válido → no hay nada que hacer
+    if not _has_valid_amount(d):
+        kapso_service.send_text(session.phone, "Gracias por la ubicación 📍 pero no tengo un gasto en curso. Envíame una foto de boleta para empezar uno.")
+        _clear_state(session)
+        return send_main_menu(session)
+
+    if session.state != EXP_AWAIT_LOCATION:
+        _set_state(session, EXP_AWAIT_LOCATION, draft=d)
 
     return advance_flow(session, user)
 
@@ -652,6 +684,8 @@ def start_report(session, user):
 
 
 def receive_report_title(session, user, text):
+    if session.state != REP_TITLE:
+        return None
     title = (text or "").strip()
     if len(title) < 5:
         return kapso_service.send_text(session.phone, "El título es muy corto (mínimo 5 caracteres). Escribe otro:")
@@ -820,6 +854,8 @@ def start_approval_action(session, user, action, report_id):
 
 
 def receive_approval_reason(session, user, text):
+    if session.state != APPR_REASON or not session.state_data.get("action"):
+        return None  # texto tardío o suelto
     data = session.state_data or {}
     action = data.get("action")
     report_id = data.get("report_id")
