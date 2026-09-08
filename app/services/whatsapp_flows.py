@@ -788,11 +788,12 @@ def show_pending_approvals(session, user):
 
     rows = []
     for rep in pending[:8]:
-        requester = rep.user.full_name.split()[0] if rep.user else "?"
+        requester = (rep.user.full_name.split()[0] if rep.user else "?")[:12]
+        amount = _fmt_amount(rep.total_amount, rep.company.base_currency or "CLP")
         rows.append({
             "id": f"appr_open:{rep.id}",
-            "title": f"{rep.public_id} — {requester}",
-            "description": f"{_fmt_amount(rep.total_amount, rep.company.base_currency or 'CLP')} — {rep.title[:30]}",
+            "title": f"{requester} — {amount}"[:24],  # límite Meta: 24 chars
+            "description": f"{rep.public_id} · {rep.title[:45]}",
         })
     _clear_state(session)
     return kapso_service.send_list(

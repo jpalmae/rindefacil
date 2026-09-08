@@ -170,7 +170,7 @@ def send_main_menu(session, greeting=None):
     if _can_approve(user):
         rows.append({
             "id": MENU_ROW_APPROVALS,
-            "title": "✅ Pendientes por aprobar",
+            "title": "✅ Por aprobar",
             "description": "Rendiciones que esperan tu decisión",
         })
     if len(accounts) > 1:
@@ -421,6 +421,17 @@ def _handle_text(session, text):
         return _start_link(session)
     if low == "empresa":
         return _handle_company_switch(session)
+
+    # Atajos de texto (usuario no vinculado no puede usarlos)
+    user_for_shortcuts = _linked_user(session)
+    if user_for_shortcuts:
+        from app.services import whatsapp_flows
+        if low in ("gasto", "nuevo gasto", "gastos"):
+            return whatsapp_flows.start_expense(session, user_for_shortcuts)
+        if low in ("rendir", "rendicion", "rendiciones"):
+            return whatsapp_flows.show_my_reports(session, user_for_shortcuts) if low == "rendiciones" else whatsapp_flows.start_report(session, user_for_shortcuts)
+        if low in ("aprobar", "aprobaciones", "pendientes"):
+            return whatsapp_flows.show_pending_approvals(session, user_for_shortcuts)
 
     # Despacho por estado
     state = session.state
