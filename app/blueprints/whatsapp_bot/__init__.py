@@ -125,7 +125,9 @@ def webhook():
 
 
 def _process_async(app, payload):
-    with app.app_context():
+    # test_request_context provee request para url_for (notificaciones usan
+    # links); sin esto, url_for fuera de request exige SERVER_NAME y falla.
+    with app.test_request_context("/"):
         try:
             handle_incoming_message(payload)
         except Exception:
