@@ -236,6 +236,7 @@ def receive_category(session, user, category_id):
     d = _draft(session)
     if category and category.company_id == user.company_id:
         d["category"] = category.name
+        _set_state(session, EXP_EDIT_FIELD, draft=d, field="category")
         return advance_flow(session, user, confirmation_text=f"✅ Categoría: *{category.name}*")
     return ask_category_list(session, user, d)
 
@@ -382,32 +383,36 @@ def receive_field_value(session, user, text):
     field = session.state_data.get("field")
     text = (text or "").strip()
 
+    def persist_and_advance(confirmation_text):
+        _set_state(session, EXP_EDIT_FIELD, draft=d, field=field)
+        return advance_flow(session, user, confirmation_text=confirmation_text)
+
     if field == "amount":
         value = _parse_amount_text(text)
         if value is None or value <= 0:
             return kapso_service.send_text(session.phone, "Monto no válido. Escribe solo números (ej: 14990):")
         d["amount"] = str(value)
-        return advance_flow(session, user, confirmation_text=f"✅ Monto: *{_fmt_amount(value, d.get('currency') or user.company.base_currency)}*")
+        return persist_and_advance(f"✅ Monto: *{_fmt_amount(value, d.get('currency') or user.company.base_currency)}*")
 
     if field == "currency":
         cur = text.upper()
         if cur not in (user.company.allowed_expense_currencies or []):
             return kapso_service.send_text(session.phone, f"Moneda no permitida. Usa: {', '.join(user.company.allowed_expense_currencies)}")
         d["currency"] = cur
-        return advance_flow(session, user, confirmation_text=f"✅ Moneda: *{cur}*")
+        return persist_and_advance(f"✅ Moneda: *{cur}*")
 
     if field == "date":
         parsed = _parse_date_text(text)
         if not parsed:
             return kapso_service.send_text(session.phone, "Fecha no válida. Usa DD/MM/AAAA (ej: 07/09/2026):")
         d["date"] = parsed
-        return advance_flow(session, user, confirmation_text=f"✅ Fecha: *{parsed}*")
+        return persist_and_advance(f"✅ Fecha: *{parsed}*")
 
     if field == "description":
         if len(text) < 15:
             return kapso_service.send_text(session.phone, f"El motivo debe tener al menos 15 caracteres (llevas {len(text)}):")
         d["description"] = text
-        return advance_flow(session, user, confirmation_text="✅ Motivo guardado")
+        return persist_and_advance("✅ Motivo guardado")
 
     return advance_flow(session, user)
 
