@@ -1,10 +1,15 @@
-"""Flujos conversacionales del bot de WhatsApp (gastos, rendiciones, aprobaciones)."""
+"""Flujos conversacionales del bot de WhatsApp (gastos, rendiciones, aprobaciones).
+
+Flujo de gasto (progresión lineal, sin repetir confirmaciones):
+foto → OCR → tarjeta editable → completar campos faltantes (monto, fecha,
+motivo, categoría) → ubicación → crear gasto.
+"""
 import logging
 import os
 import re
 import uuid
 from datetime import date, datetime, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 
 from flask import current_app
 
@@ -36,7 +41,6 @@ from app.services.whatsapp_bot_service import (
     _set_state,
     send_main_menu,
 )
-from werkzeug.utils import secure_filename
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +54,9 @@ REP_TITLE = "rep_title"
 REP_SETTLEMENT = "rep_settlement"
 REP_CONFIRM = "rep_confirm"
 APPR_REASON = "appr_reason"
+
+FIELD_LABELS = {"amount": "Monto", "currency": "Moneda", "date": "Fecha",
+                "category": "Categoría", "description": "Motivo"}
 
 REPORT_STATUS_LABELS = {
     ReportStatus.DRAFT: "📝 Borrador",
@@ -79,7 +86,7 @@ def handle_action(session, user, action_id, title):
         return show_pending_approvals(session, user)
 
     if action_id == "exp_confirm_ok":
-        return ask_location(session, user)
+        return advance_flow(session, user)
     if action_id == "exp_confirm_edit":
         return ask_which_field(session, user)
     if action_id == "exp_confirm_cancel":
@@ -88,16 +95,7 @@ def handle_action(session, user, action_id, title):
     if action_id.startswith("exp_edit:"):
         return ask_field_value(session, user, action_id.split(":", 1)[1])
     if action_id.startswith("exp_editcat:"):
-        category_id = action_id.split(":", 1)[1]
-        category = Category.query.get(category_id)
-        d = session.state_data.get("draft") or {}
-        if category and category.company_id == user.company_id:
-            d["category"] = category.name
-            _set_state(session, EXP_OCR_CONFIRM, draft=d)
-            return show_ocr_confirmation(session, user)
-        return ask_which_field(session, user)
-    if action_id.startswith("exp_loc_skip"):
-        return None  # GPS obligatorio: no se ofrece skip
+        return receive_category(session, user, action_id.split(":", 1)[1])
     if action_id == "rep_settle_reimburse":
         session.state_data["settlement_type"] = ReportSettlementType.EMPLOYEE_REIMBURSEMENT
         return confirm_report(session, user)
@@ -133,12 +131,117 @@ def handle_text_state(session, user, text):
         return receive_approval_reason(session, user, text)
     if state in (EXP_OCR_CONFIRM, EXP_AWAIT_LOCATION, REP_SETTLEMENT, REP_CONFIRM):
         return kapso_service.send_text(session.phone, "Usa los botones de arriba para continuar, o escribe *cancelar*.")
-    # idle sin flujo: interpretar como posible gasto rápido no soportado
     return send_main_menu(session)
 
 
 # ---------------------------------------------------------------------------
-# Gastos: foto → OCR → confirmar → ubicación → crear
+# Progresión del flujo de gasto
+# ---------------------------------------------------------------------------
+
+def _draft(session):
+    return dict(session.state_data.get("draft") or {})
+
+
+def _has_valid_amount(d):
+    try:
+        return Decimal(str(d.get("amount"))) > 0
+    except (InvalidOperation, TypeError, ValueError):
+        return False
+
+
+def _parse_draft_date(d):
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(d.get("date"), fmt).date()
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _first_missing_field(user, d):
+    """Campos obligatorios en orden; None si todos están completos."""
+    if not _has_valid_amount(d):
+        return "amount"
+    if not _parse_draft_date(d):
+        return "date"
+    if not d.get("description") or len(d["description"].strip()) < 15:
+        return "description"
+    if not _resolve_category(user, d.get("category") or ""):
+        return "category"
+    return None
+
+
+def _resolve_category(user, name):
+    if not name:
+        return None
+    return Category.query.filter(
+        Category.company_id == user.company_id,
+        Category.is_active.is_(True),
+        Category.name.ilike(f"%{name.strip()}%"),
+    ).first()
+
+
+def advance_flow(session, user, confirmation_text=None):
+    """Avanza al siguiente paso del flujo de gasto SIN repetir confirmaciones.
+
+    Orden: campos faltantes → ubicación → crear.
+    """
+    d = _draft(session)
+
+    if confirmation_text:
+        kapso_service.send_text(session.phone, confirmation_text)
+
+    missing = _first_missing_field(user, d)
+    if missing == "amount":
+        _set_state(session, EXP_EDIT_FIELD, draft=d, field="amount")
+        return kapso_service.send_text(session.phone, "Escribe el monto total (solo números, ej: 12990):")
+    if missing == "date":
+        _set_state(session, EXP_EDIT_FIELD, draft=d, field="date")
+        return kapso_service.send_text(session.phone, "Escribe la fecha del gasto (DD/MM/AAAA):")
+    if missing == "description":
+        _set_state(session, EXP_EDIT_FIELD, draft=d, field="description")
+        return kapso_service.send_text(
+            session.phone,
+            f"Escribe el motivo del gasto (mínimo 15 caracteres):",
+        )
+    if missing == "category":
+        return ask_category_list(session, user, d)
+
+    if d.get("latitude") is None or d.get("longitude") is None:
+        _set_state(session, EXP_AWAIT_LOCATION, draft=d)
+        return kapso_service.send_location_request(
+            session.phone,
+            "Último paso 📍\nComparte tu ubicación para registrar el gasto.",
+        )
+
+    return create_expense(session, user)
+
+
+def ask_category_list(session, user, d):
+    _set_state(session, EXP_EDIT_FIELD, draft=d, field="category")
+    categories = (
+        Category.query
+        .filter_by(company_id=user.company_id, is_active=True)
+        .order_by(Category.name)
+        .limit(10)
+        .all()
+    )
+    rows = [{"id": f"exp_editcat:{c.id}", "title": c.name[:24]} for c in categories]
+    return kapso_service.send_list(session.phone, "Elige la categoría del gasto:", "Elegir",
+                                   [{"title": "Categorías", "rows": rows}])
+
+
+def receive_category(session, user, category_id):
+    category = Category.query.get(category_id)
+    d = _draft(session)
+    if category and category.company_id == user.company_id:
+        d["category"] = category.name
+        return advance_flow(session, user, confirmation_text=f"✅ Categoría: *{category.name}*")
+    return ask_category_list(session, user, d)
+
+
+# ---------------------------------------------------------------------------
+# Gastos: foto → OCR → tarjeta → progresión
 # ---------------------------------------------------------------------------
 
 def handle_image(session, message):
@@ -194,46 +297,34 @@ def handle_image(session, message):
     return show_ocr_confirmation(session, user)
 
 
-def _resolve_category(user, name):
-    if not name:
-        return None
-    return Category.query.filter(
-        Category.company_id == user.company_id,
-        Category.is_active.is_(True),
-        Category.name.ilike(f"%{name.strip()}%"),
-    ).first()
-
-
 def show_ocr_confirmation(session, user):
-    d = session.state_data.get("draft") or {}
+    d = _draft(session)
     category = _resolve_category(user, d.get("category") or "")
 
     lines = ["*Leí esto de tu boleta* 👇"]
     lines.append(f"💵 Monto: {_fmt_amount(d.get('amount') or 0, d.get('currency') or user.company.base_currency)}")
-    if d.get("merchant"):
-        lines.append(f"🏪 Comercio: {d['merchant']}")
-    if d.get("date"):
-        lines.append(f"📅 Fecha: {d['date']}")
+    lines.append(f"🏪 Comercio: {d.get('merchant') or '—'}")
+    lines.append(f"📅 Fecha: {d.get('date') or '—'}")
     if d.get("time"):
         lines.append(f"🕐 Hora: {d['time']}")
-    if category:
-        lines.append(f"🏷️ Categoría: {category.name}")
+    lines.append(f"🏷️ Categoría: {category.name if category else '—'}")
+    lines.append(f"📝 Motivo: {d.get('description') or '—'}")
+    lines.append("")
+    lines.append("Si falta algo te lo preguntaré al continuar 👍")
 
     return kapso_service.send_buttons(
         session.phone,
         "\n".join(lines),
         [
-            ("exp_confirm_ok", "✅ Correcto"),
+            ("exp_confirm_ok", "✅ Continuar"),
             ("exp_confirm_edit", "✏️ Editar"),
             ("exp_confirm_cancel", "❌ Cancelar"),
         ],
         header="Nuevo gasto",
-        footer="Confirma para continuar",
     )
 
 
 def ask_which_field(session, user):
-    _set_state(session, EXP_EDIT_FIELD, draft=session.state_data.get("draft") or {})
     rows = [
         {"id": "exp_edit:amount", "title": "Monto"},
         {"id": "exp_edit:currency", "title": "Moneda"},
@@ -248,62 +339,77 @@ def ask_which_field(session, user):
 
 
 def ask_field_value(session, user, field):
-    _set_state(session, EXP_EDIT_FIELD, draft=session.state_data.get("draft") or {}, field=field)
+    _set_state(session, EXP_EDIT_FIELD, draft=_draft(session), field=field)
+    if field == "category":
+        return ask_category_list(session, user, _draft(session))
+
     prompts = {
         "amount": "Escribe el monto total (solo números, ej: 12990 o 1250.50):",
-        "currency": "Escribe la moneda: CLP, USD o PEN:",
+        "currency": f"Escribe la moneda ({', '.join(user.company.allowed_expense_currencies)}):",
         "date": "Escribe la fecha (DD/MM/AAAA):",
-        "category": None,  # se maneja con lista abajo
         "description": "Describe el motivo del gasto (mínimo 15 caracteres):",
     }
-    if field == "category":
-        categories = (
-            Category.query
-            .filter_by(company_id=user.company_id, is_active=True)
-            .order_by(Category.name)
-            .limit(10)
-            .all()
-        )
-        rows = [{"id": f"exp_editcat:{c.id}", "title": c.name[:24]} for c in categories]
-        _set_state(session, EXP_EDIT_FIELD, draft=session.state_data.get("draft") or {}, field="__await")
-        # las respuestas de lista llegan por handle_action con id exp_editcat:
-        session.state_data["field"] = "category"
-        db.session.commit()
-        return kapso_service.send_list(session.phone, "Elige la categoría:", "Elegir", [{"title": "Categorías", "rows": rows}])
-
     return kapso_service.send_text(session.phone, prompts[field])
 
 
+def _parse_amount_text(text):
+    text = (text or "").strip().replace("$", "").replace(" ", "")
+    # 14.990 → 14990 (CLP miles); 1250.50 mantiene decimales; 1,250.50 → 1250.50
+    if "," in text and "." in text:
+        if text.rfind(",") > text.rfind("."):
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            text = text.replace(",", "")
+    elif "," in text:
+        integer_part = text.split(",")[0]
+        decimals = text.split(",")[1]
+        if len(decimals) == 3 and integer_part:  # 1,250 → miles
+            text = text.replace(",", "")
+        else:
+            text = text.replace(",", ".")
+    elif "." in text:
+        parts = text.split(".")
+        if len(parts) == 2 and len(parts[1]) == 3 and parts[0]:  # 14.990 → miles
+            text = text.replace(".", "")
+    try:
+        return Decimal(text)
+    except (InvalidOperation, ValueError):
+        return None
+
+
 def receive_field_value(session, user, text):
-    d = session.state_data.get("draft") or {}
+    d = _draft(session)
     field = session.state_data.get("field")
     text = (text or "").strip()
 
     if field == "amount":
-        try:
-            value = Decimal(text.replace(".", "").replace(",", ".")) if ("," in text) else Decimal(text)
-            if value <= 0:
-                raise InvalidOperation
-            d["amount"] = str(value)
-        except (InvalidOperation, ValueError):
-            return kapso_service.send_text(session.phone, "Monto no válido. Escribe solo números (ej: 12990):")
-    elif field == "currency":
+        value = _parse_amount_text(text)
+        if value is None or value <= 0:
+            return kapso_service.send_text(session.phone, "Monto no válido. Escribe solo números (ej: 14990):")
+        d["amount"] = str(value)
+        return advance_flow(session, user, confirmation_text=f"✅ Monto: *{_fmt_amount(value, d.get('currency') or user.company.base_currency)}*")
+
+    if field == "currency":
         cur = text.upper()
         if cur not in (user.company.allowed_expense_currencies or []):
             return kapso_service.send_text(session.phone, f"Moneda no permitida. Usa: {', '.join(user.company.allowed_expense_currencies)}")
         d["currency"] = cur
-    elif field == "date":
+        return advance_flow(session, user, confirmation_text=f"✅ Moneda: *{cur}*")
+
+    if field == "date":
         parsed = _parse_date_text(text)
         if not parsed:
             return kapso_service.send_text(session.phone, "Fecha no válida. Usa DD/MM/AAAA (ej: 07/09/2026):")
         d["date"] = parsed
-    elif field == "description":
+        return advance_flow(session, user, confirmation_text=f"✅ Fecha: *{parsed}*")
+
+    if field == "description":
         if len(text) < 15:
             return kapso_service.send_text(session.phone, f"El motivo debe tener al menos 15 caracteres (llevas {len(text)}):")
         d["description"] = text
+        return advance_flow(session, user, confirmation_text="✅ Motivo guardado")
 
-    _set_state(session, EXP_OCR_CONFIRM, draft=d)
-    return show_ocr_confirmation(session, user)
+    return advance_flow(session, user)
 
 
 def _parse_date_text(text):
@@ -316,72 +422,50 @@ def _parse_date_text(text):
     return None
 
 
-def ask_location(session, user):
-    d = session.state_data.get("draft") or {}
-
-    # Validaciones previas: monto, fecha y motivo
-    try:
-        amount = Decimal(str(d.get("amount") or ""))
-        if amount <= 0:
-            raise InvalidOperation
-    except (InvalidOperation, ValueError):
-        _set_state(session, EXP_EDIT_FIELD, draft=d, field="amount")
-        return kapso_service.send_text(session.phone, "No tengo un monto válido. Escríbelo (solo números):")
-
-    if not d.get("date"):
-        _set_state(session, EXP_EDIT_FIELD, draft=d, field="date")
-        return kapso_service.send_text(session.phone, "No tengo la fecha. Escríbela (DD/MM/AAAA):")
-
-    if not d.get("description"):
-        _set_state(session, EXP_EDIT_FIELD, draft=d, field="description")
-        return kapso_service.send_text(session.phone, "Falta el motivo del gasto (mínimo 15 caracteres):")
-
-    _set_state(session, EXP_AWAIT_LOCATION, draft=d)
-    return kapso_service.send_location_request(
-        session.phone,
-        "Por política de la empresa necesito tu ubicación al momento del gasto 📍\nToca el botón para compartirla.",
-    )
-
-
 def handle_location(session, user, location):
-    if session.state != EXP_AWAIT_LOCATION:
-        return send_main_menu(session)
+    """Ubicación compartida por el usuario (mensaje type=location)."""
+    d = _draft(session)
 
-    d = session.state_data.get("draft") or {}
-    d["latitude"] = location.get("latitude")
-    d["longitude"] = location.get("longitude")
+    lat = location.get("latitude")
+    lon = location.get("longitude")
+    if lat is None or lon is None:
+        logger.warning("Location sin coordenadas. Payload: %s", location)
+        _set_state(session, EXP_AWAIT_LOCATION, draft=d)
+        return kapso_service.send_location_request(
+            session.phone,
+            "No recibí las coordenadas 📍 Inténtalo de nuevo con el botón:",
+        )
+
+    d["latitude"] = lat
+    d["longitude"] = lon
     d["gps_address"] = (location.get("address") or location.get("name") or "").strip() or None
-    _set_state(session, EXP_AWAIT_LOCATION, draft=d)
-    return create_expense(session, user)
+
+    # Si no había flujo de gasto activo con datos mínimos, arrancar desde la tarjeta
+    if session.state != EXP_AWAIT_LOCATION or not _has_valid_amount(d):
+        _set_state(session, EXP_OCR_CONFIRM, draft=d)
+        return show_ocr_confirmation(session, user)
+
+    return advance_flow(session, user)
 
 
 def create_expense(session, user):
-    d = session.state_data.get("draft") or {}
+    d = _draft(session)
     phone = session.phone
 
     try:
         amount = Decimal(str(d["amount"]))
     except (InvalidOperation, KeyError):
-        return kapso_service.send_text(phone, "Error interno con el monto. Escribe *menu* para empezar de nuevo.")
+        return advance_flow(session, user, confirmation_text="⚠️ Perdí el monto, empecemos de nuevo:")
 
     currency = d.get("currency") or user.company.base_currency or "CLP"
     base_currency = user.company.base_currency or ExpenseCurrency.CLP
-    expense_date = None
-    for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
-        try:
-            expense_date = datetime.strptime(d.get("date"), fmt).date()
-            break
-        except (ValueError, TypeError):
-            continue
+    expense_date = _parse_draft_date(d)
     if not expense_date:
-        return kapso_service.send_text(phone, "Error interno con la fecha. Escribe *menu*.")
+        return advance_flow(session, user, confirmation_text="⚠️ Perdí la fecha, empecemos de nuevo:")
 
     category = _resolve_category(user, d.get("category") or "")
     if not category:
-        categories = Category.query.filter_by(company_id=user.company_id, is_active=True).order_by(Category.name).limit(10).all()
-        rows = [{"id": f"exp_editcat:{c.id}", "title": c.name[:24]} for c in categories]
-        _set_state(session, EXP_EDIT_FIELD, draft=d, field="category")
-        return kapso_service.send_list(phone, "Elige una categoría para el gasto:", "Elegir", [{"title": "Categorías", "rows": rows}])
+        return ask_category_list(session, user, d)
 
     receipt_time = None
     if d.get("time"):
@@ -392,13 +476,20 @@ def create_expense(session, user):
 
     amount_base, exchange_rate = resolve_amount_in_base(user.company, currency, amount)
     if amount_base is None:
+        _clear_state(session)
         return kapso_service.send_text(
             phone,
             f"No pude obtener el tipo de cambio {currency}→{base_currency} 😕 Intenta más tarde o registra el gasto en la web.",
         )
+    if currency == base_currency:
+        exchange_rate = Decimal("1")
 
-    gps_lat = Decimal(str(d.get("latitude")))
-    gps_lon = Decimal(str(d.get("longitude")))
+    try:
+        gps_lat = Decimal(str(d["latitude"]))
+        gps_lon = Decimal(str(d["longitude"]))
+    except (InvalidOperation, KeyError):
+        return advance_flow(session, user)
+
     gps_address = d.get("gps_address")
     if not gps_address:
         geocode = reverse_geocode(float(gps_lat), float(gps_lon))
@@ -467,9 +558,7 @@ def create_expense(session, user):
     db.session.add(expense)
     db.session.commit()
 
-    warnings = ""
-    if expense.is_duplicate:
-        warnings = "\n\n⚠️ *Atención:* este comprobante parece duplicado de uno anterior."
+    warnings = "\n\n⚠️ *Atención:* este comprobante parece duplicado de uno anterior." if expense.is_duplicate else ""
 
     _clear_state(session)
     total_line = f"{_fmt_amount(amount, currency)}"
@@ -477,12 +566,20 @@ def create_expense(session, user):
         total_line += f" (≈ {_fmt_amount(amount_base, base_currency)})"
     kapso_service.send_text(
         phone,
-        f"✅ *Gasto creado*\n\n{total_line} — {category.name}{warnings}\n\nSigue agregando gastos o escribe *menu*.",
+        f"✅ *Gasto creado*\n\n{total_line} — {category.name}\n{expense.public_id}{warnings}",
     )
-    return start_expense(session, user, new_hint=True)
+    return kapso_service.send_buttons(
+        phone,
+        "¿Qué sigue?",
+        [
+            ("menu_expense", "📷 Otro gasto"),
+            ("menu_report", "📦 Rendir"),
+            ("menu_help", "🏠 Menú"),
+        ],
+    )
 
 
-def start_expense(session, user, new_hint=False):
+def start_expense(session, user):
     _clear_state(session)
     return kapso_service.send_text(
         session.phone,
@@ -635,8 +732,6 @@ def show_my_reports(session, user):
     for rep in reports:
         label = REPORT_STATUS_LABELS.get(rep.status, rep.status)
         lines.append(f"{label} — {rep.title[:30]} — {_fmt_amount(rep.total_amount, user.company.base_currency or 'CLP')}")
-        if rep.status == ReportStatus.NEEDS_INFO:
-            lines.append("   ↳ responde antecedentes desde la web o escribe *menu*")
     return kapso_service.send_text(session.phone, "\n".join(lines))
 
 

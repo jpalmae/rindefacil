@@ -372,7 +372,14 @@ def handle_incoming_message(payload):
             elif msg_type == "interactive":
                 _handle_interactive(session, message.get("interactive") or {})
             elif msg_type == "location":
-                _handle_location(session, message.get("location") or {})
+                location = _extract_location(message)
+                if not location:
+                    logger.warning(
+                        "Mensaje location sin coordenadas. Payload completo: %s",
+                        {k: v for k, v in message.items() if k != 'kapso'},
+                    )
+                    logger.warning("kapso block: %s", message.get('kapso'))
+                _handle_location(session, location)
             elif msg_type == "image":
                 from app.services.whatsapp_flows import handle_image
                 handle_image(session, message)
@@ -472,6 +479,20 @@ def _handle_interactive(session, interactive):
 
     from app.services import whatsapp_flows
     return whatsapp_flows.handle_action(session, user, button_id, title)
+
+
+def _extract_location(message):
+    """La ubicación puede venir en message.location o en
+    message.kapso.message_type_data según la versión del payload."""
+    candidates = [
+        message.get("location") or {},
+        ((message.get("kapso") or {}).get("message_type_data")) or {},
+        ((message.get("kapso") or {}).get("location")) or {},
+    ]
+    for candidate in candidates:
+        if candidate.get("latitude") is not None and candidate.get("longitude") is not None:
+            return candidate
+    return {}
 
 
 def _handle_location(session, location):
