@@ -479,8 +479,8 @@ def handle_location(session, user, location):
         _clear_state(session)
         return send_main_menu(session)
 
-    if session.state != EXP_AWAIT_LOCATION:
-        _set_state(session, EXP_AWAIT_LOCATION, draft=d)
+    # Persistir SIEMPRE las coordenadas antes de avanzar (el draft local no vive sin _set_state)
+    _set_state(session, EXP_AWAIT_LOCATION, draft=d)
 
     return advance_flow(session, user)
 
