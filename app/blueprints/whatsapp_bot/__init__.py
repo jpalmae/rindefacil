@@ -33,12 +33,13 @@ def _verify_signature(raw_body: bytes, signature: str) -> bool:
 
 
 def _keys_for(item, event_key, is_message_event):
-    """Claves de idempotencia: la del evento + el wamid del mensaje."""
-    keys = [f"evt:{event_key}"]
+    """Claves de idempotencia (hasheadas, longitud constante ~67 chars):
+    la del evento + el wamid del mensaje."""
+    keys = ["evt:" + hashlib.sha256(event_key.encode()).hexdigest()]
     if is_message_event:
         wamid = (item.get("message") or {}).get("id") or ""
         if wamid:
-            keys.append(f"wa:{wamid}")
+            keys.append("wa:" + hashlib.sha256(wamid.encode()).hexdigest())
     return keys
 
 
@@ -55,6 +56,11 @@ def _claim(keys):
         return True
     except IntegrityError:
         db.session.rollback()
+        return False
+    except Exception:
+        # Cualquier otro fallo de BD al reclamar: no despachar (evita dobles)
+        db.session.rollback()
+        current_app.logger.exception("No se pudo reclamar evento WhatsApp %s", keys)
         return False
 
 

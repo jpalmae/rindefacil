@@ -92,6 +92,12 @@ with app.app_context():
     time.sleep(0.6)
     check('carrera: mismo wamid despachado una sola vez', len(dispatched) == 3)
 
+    # 6b. wamid largo real (~85 chars base64) — debe caber en las claves
+    long_wamid = "wamid.HBgLNTY5NzUxNjY0MTAVAgASGCBBQ0ExRUI4OTZBN0RGNzQwN0U2NTZBODUxMjYxQ0I3NwA="
+    r = post(msg(wamid=long_wamid), 'k4')
+    time.sleep(0.4)
+    check('wamid largo (85 chars) despachado OK', r.status_code == 200 and len(dispatched) == 4)
+
     # 7. Batch
     batch = {"batch": True, "data": [msg(wamid='wamid.b1'), msg(wamid='wamid.b2')]}
     raw = json.dumps(batch).encode()
@@ -100,13 +106,14 @@ with app.app_context():
                     headers={'X-Webhook-Signature': sig, 'X-Webhook-Event': 'whatsapp.message.received',
                              'X-Idempotency-Key': 'kb1'})
     time.sleep(0.4)
-    check('batch despacha ambos', len(dispatched) == 5)
+    check('batch despacha ambos', len(dispatched) == 6)
 
     # Limpieza
     from app.models.whatsapp import WhatsappProcessedEvent
-    for prefix in ('evt:k', 'wa:wamid', 'evt:race', 'evt:kb1'):
-        for row in WhatsappProcessedEvent.query.filter(WhatsappProcessedEvent.event_key.startswith(prefix)).all():
-            _db.session.delete(row)
+    for row in WhatsappProcessedEvent.query.filter(
+        WhatsappProcessedEvent.event_key.startswith(('evt:', 'wa:'))
+    ).all():
+        _db.session.delete(row)
     _db.session.commit()
 
 print(f"\n{PASS} pasaron, {FAIL} fallaron")
