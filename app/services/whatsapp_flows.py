@@ -818,11 +818,13 @@ def show_approval_detail(session, user, report_id):
         "",
         "*Gastos incluidos:*",
     ]
-    for exp in report.expenses[:10]:
+    expenses = list(report.expenses)
+    for exp in expenses[:10]:
         cat = exp.category.name if exp.category else "—"
-        lines.append(f"• {_fmt_amount(exp.amount, exp.currency)} — {cat} — {exp.date.strftime('%d/%m')}")
-    if len(report.expenses) > 10:
-        lines.append(f"… y {len(report.expenses) - 10} más")
+        fecha = exp.date.strftime("%d/%m") if exp.date else "—"
+        lines.append(f"• {_fmt_amount(exp.amount, exp.currency)} — {cat} — {fecha}")
+    if len(expenses) > 10:
+        lines.append(f"… y {len(expenses) - 10} más")
 
     _set_state(session, APPR_REASON, action=None, report_id=str(report.id))
     return kapso_service.send_buttons(
