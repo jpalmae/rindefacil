@@ -50,6 +50,7 @@ ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
 EXP_OCR_CONFIRM = "exp_ocr_confirm"
 EXP_EDIT_FIELD = "exp_edit_field"
 EXP_AWAIT_LOCATION = "exp_await_location"
+REP_SELECT = "rep_select"
 REP_TITLE = "rep_title"
 REP_SETTLEMENT = "rep_settlement"
 REP_CONFIRM = "rep_confirm"
@@ -149,6 +150,8 @@ def handle_text_state(session, user, text):
     state = session.state
     if state == EXP_EDIT_FIELD:
         return receive_field_value(session, user, text)
+    if state == REP_SELECT:
+        return receive_expense_selection(session, user, text)
     if state == REP_TITLE:
         return receive_report_title(session, user, text)
     if state == APPR_REASON:
@@ -658,28 +661,78 @@ def show_my_expenses(session, user):
 # ---------------------------------------------------------------------------
 
 def start_report(session, user):
-    expenses = (
-        Expense.query
-        .filter(
-            Expense.user_id == user.id,
-            Expense.status.in_([ExpenseStatus.DRAFT, ExpenseStatus.REJECTED]),
-            Expense.report_id.is_(None),
-        )
-        .order_by(Expense.date.desc())
-        .all()
-    )
-    if not expenses:
+    query = Expense.query.filter(
+        Expense.user_id == user.id,
+        Expense.status.in_([ExpenseStatus.DRAFT, ExpenseStatus.REJECTED]),
+        Expense.report_id.is_(None),
+    ).order_by(Expense.date.desc())
+
+    all_count = query.count()
+    if not all_count:
         return kapso_service.send_text(
             session.phone,
             "No tienes gastos borrador para rendir 📭 Primero crea gastos enviándome fotos de tus boletas.",
         )
 
-    _set_state(session, REP_TITLE, expense_ids=[str(e.id) for e in expenses])
+    expenses = query.limit(10).all()
+    base = user.company.base_currency or "CLP"
     total = sum((e.amount_clp or Decimal("0") for e in expenses), Decimal("0"))
+
+    lines = ["*Tus gastos disponibles:*", ""]
+    for i, exp in enumerate(expenses, 1):
+        cat = exp.category.name if exp.category else "Sin categoría"
+        fecha = exp.date.strftime("%d/%m") if exp.date else "—"
+        lines.append(f"{i}. {_fmt_amount(exp.amount, exp.currency)} — {cat} — {fecha}")
+        desc = (exp.description or "").strip()
+        if desc:
+            lines.append(f"   ↳ {desc[:40]}")
+    lines.append("")
+    lines.append(f"*Total: {_fmt_amount(total, base)}*")
+    if all_count > 10:
+        lines.append(f"_(mostrando 10 de {all_count})_")
+    lines.append("")
+    lines.append("Responde con los *números* a incluir (ej: *1,3*) o escribe *todos*.")
+
+    _set_state(session, REP_SELECT, expense_ids=[str(e.id) for e in expenses])
+    return kapso_service.send_text(session.phone, "\n".join(lines))
+
+
+def receive_expense_selection(session, user, text):
+    if session.state != REP_SELECT:
+        return None
+    ids = session.state_data.get("expense_ids") or []
+    text = (text or "").strip().lower()
+
+    def re_ask(reason):
+        return kapso_service.send_text(session.phone, f"{reason}\nResponde con números (ej: *1,3*) o *todos*.")
+
+    if text in ("todos", "todo", "all"):
+        selected = list(range(1, len(ids) + 1))
+    else:
+        if not re.fullmatch(r"[0-9,\s]+", text):
+            return re_ask("No entendí la selección.")
+        nums = []
+        for part in re.split(r"[,\s]+", text):
+            if not part:
+                continue
+            n = int(part)
+            if not 1 <= n <= len(ids):
+                return re_ask(f"El número {n} no está en la lista.")
+            nums.append(n)
+        selected = sorted(set(nums))
+
+    if not selected:
+        return re_ask("Debes elegir al menos un gasto.")
+
+    chosen_ids = [ids[n - 1] for n in selected]
+    expenses = Expense.query.filter(Expense.id.in_(chosen_ids)).all()
+    total = sum((e.amount_clp or Decimal("0") for e in expenses), Decimal("0"))
+
+    _set_state(session, REP_TITLE, expense_ids=chosen_ids)
     return kapso_service.send_text(
         session.phone,
-        f"Tienes *{len(expenses)} gastos* por un total de {_fmt_amount(total, user.company.base_currency or 'CLP')}.\n\n"
-        "Escribe un *título* para la rendición (ej: Gastos visita cliente Antofagasta):",
+        f"Rendición con *{len(expenses)} gasto{'s' if len(expenses) != 1 else ''}* por *{_fmt_amount(total, user.company.base_currency or 'CLP')}* ✅\n\n"
+        "Ahora escribe un *título* (ej: Gastos visita cliente Antofagasta):",
     )
 
 
