@@ -91,4 +91,5 @@ sixmanager-gastos-spec.md
 *.key
 *.crt
 nginx/certs/
-Icon
+IconIcon
+Icon?
