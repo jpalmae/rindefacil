@@ -308,13 +308,16 @@ def request_report_info(report, user, reason):
 
 
 def pending_reports_for_approver(user, limit=10):
-    """Rendiciones en revisión que este usuario puede accionar ahora."""
+    """Rendiciones en revisión que este usuario puede accionar ahora.
+
+    Igual que la web (_can_user_approve_report): incluye rendiciones propias
+    cuando el flujo designa al usuario como aprobador del paso actual.
+    """
     candidates = (
         Report.query
         .filter(
             Report.company_id == user.company_id,
             Report.status == ReportStatus.UNDER_REVIEW,
-            Report.user_id != user.id,
         )
         .order_by(Report.submitted_at.asc())
         .limit(50)
