@@ -846,7 +846,7 @@ def show_pending_approvals(session, user):
         rows.append({
             "id": f"appr_open:{rep.id}",
             "title": f"{requester} — {amount}"[:24],  # límite Meta: 24 chars
-            "description": f"{rep.public_id} · {rep.title[:45]}",
+            "description": f"{rep.title[:60]} · {amount}"[:72],  # límite Meta: 72 chars
         })
     _clear_state(session)
     return kapso_service.send_list(

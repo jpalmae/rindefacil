@@ -105,11 +105,27 @@ def send_list(to, body, button_text, sections, header=None, footer=None):
     """Lista de opciones. Máx 10 filas en total.
 
     sections: lista de {"title": str, "rows": [{"id","title","description?"}]}
+    Límites Meta: title fila 24, description 72, título sección 24, botón 20.
     """
+    clipped = []
+    safe_sections = []
+    for section in sections:
+        safe_rows = []
+        for row in section.get("rows", []):
+            title = (row.get("title") or "")[:24]
+            description = row.get("description")
+            if description and len(description) > 72:
+                clipped.append(description)
+                description = description[:72]
+            safe_rows.append({"id": row.get("id"), "title": title, **({"description": description} if description else {})})
+        safe_sections.append({"title": (section.get("title") or "")[:24], "rows": safe_rows})
+    if clipped:
+        current_app.logger.warning("send_list: descriptions recortadas a 72 chars")
+
     interactive = {
         "type": "list",
         "body": {"text": body},
-        "action": {"button": button_text[:20], "sections": sections},
+        "action": {"button": button_text[:20], "sections": safe_sections},
     }
     if header:
         interactive["header"] = {"type": "text", "text": header[:60]}
