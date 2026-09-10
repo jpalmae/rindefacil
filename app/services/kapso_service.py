@@ -174,8 +174,8 @@ def send_template(to, template_name, lang="es", body_params=None, buttons_params
     })
 
 
-def mark_read(to, message_id, typing=True):
-    """Marca mensaje como leído (+ indicador escribiendo)."""
+def mark_read(message_id, typing=True):
+    """Marca mensaje como leído (doble check azul) + indicador escribiendo."""
     payload = {
         "messaging_product": "whatsapp",
         "status": "read",

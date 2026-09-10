@@ -361,6 +361,14 @@ def handle_incoming_message(payload):
         logger.warning("Webhook WhatsApp sin teléfono: %s", payload)
         return
 
+    # Doble check azul + "escribiendo…" apenas llega el mensaje
+    wamid = message.get("id")
+    if wamid:
+        try:
+            kapso_service.mark_read(wamid)
+        except Exception:
+            logger.debug("mark_read falló para %s", wamid)
+
     lock = _get_phone_lock(phone)
     with lock:
         session = _get_session(phone)
