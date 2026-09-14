@@ -232,7 +232,7 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-bold text-gray-900">
                                 {{ currency_symbol }}{{ "{:,.0f}".format(report.total_amount) }}
-                                <div class="text-[10px] font-medium text-gray-500 mt-1">CLP</div>
+                                <div class="text-[10px] font-medium text-gray-500 mt-1">{{ base_currency }}</div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-center">
                                 {% if report.status == 'draft' %}
@@ -317,7 +317,7 @@
                     </div>
                     <div class="text-xl font-black text-primary tracking-tight">
                         {{ currency_symbol }}{{ "{:,.0f}".format(report.total_amount) }}
-                        <div class="text-[10px] font-medium text-gray-500 mt-1 text-right">CLP</div>
+                        <div class="text-[10px] font-medium text-gray-500 mt-1 text-right">{{ base_currency }}</div>
                     </div>
                 </div>
             </a>
