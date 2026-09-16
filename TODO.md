@@ -8,7 +8,7 @@
 - [ ] **Limpiar ~37 GB de imágenes Docker no usadas** en server prod (100.106.236.88). CUIDADO: servidor compartido con otros proyectos — revisar con dueños antes de `docker system prune`. Además hay 7.7 GB de build cache reclaimable.
 
 ## OCR
-- [ ] **Subir timeout de OCR local de 10s a 15s** si se siguen viendo timeouts de `qwen3.6-35b-a3b` (2 el 2026-09-07). El fallback funciona, pero el modelo primario falla por tiempo.
+- [x] ~~Subir timeout de OCR local de 10s a 15s~~ — hecho 2026-09-16 (prod y QA, ambas empresas)
 
 ## Observabilidad
 - [ ] **Habilitar access logs de Gunicorn** — actualmente solo loguea errores; no hay auditoría de requests HTTP (códigos, latencia por ruta). Config `accesslog` / `logconfig` en gunicorn.conf.py.
