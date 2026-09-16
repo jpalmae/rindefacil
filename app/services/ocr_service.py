@@ -48,33 +48,48 @@ def _breaker_record(key, success):
 
 
 def _extract_json_payload(raw_content):
+    """Devuelve un dict con los datos del gasto, o None.
+
+    Si el modelo devuelve JSON válido pero no objeto (array, string,
+    número), se descarta: el contrato de extract_expense_data es un dict.
+    """
     if not raw_content:
         return None
 
     text = raw_content.strip()
 
+    candidates = []
+
     # Direct JSON response
     try:
-        return json.loads(text)
+        candidates.append(json.loads(text))
     except Exception:
         pass
 
-    # Markdown fenced JSON (```json ... ``` or ``` ... ```)
+    # Markdown fenced JSON (```json ... ``` o ``` ... ```)
     fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text, re.IGNORECASE)
     if fenced:
         try:
-            return json.loads(fenced.group(1))
+            candidates.append(json.loads(fenced.group(1)))
         except Exception:
             pass
 
-    # Last resort: extract first JSON object-like block
+    # Último recurso: primer bloque tipo objeto
     object_match = re.search(r"\{[\s\S]*\}", text)
     if object_match:
         try:
-            return json.loads(object_match.group(0))
+            candidates.append(json.loads(object_match.group(0)))
         except Exception:
-            return None
+            pass
 
+    for parsed in candidates:
+        if isinstance(parsed, dict):
+            return parsed
+
+    if candidates:
+        current_app.logger.warning(
+            "OCR devolvió JSON no-objeto (%s): %.120s", type(candidates[0]).__name__, text,
+        )
     return None
 
 
