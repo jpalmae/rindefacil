@@ -332,14 +332,12 @@ def _is_uuid(value):
 
 def get_channels(user, filters):
     q = _base_query(user, filters)
+    source_e = func.coalesce(
+        func.nullif(Expense.gps_validation_meta.op("->>")("source"), ""), "web"
+    )
     rows = (
-        q.with_entities(
-            func.coalesce(
-                func.nullif(Expense.gps_validation_meta.op("->>")("source"), ""), "web"
-            ),
-            func.count(Expense.id),
-        )
-        .group_by(1)
+        q.with_entities(source_e, func.count(Expense.id))
+        .group_by(source_e)
         .all()
     )
     return {r[0]: r[1] for r in rows}
