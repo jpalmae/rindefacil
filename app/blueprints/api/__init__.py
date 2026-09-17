@@ -2323,6 +2323,79 @@ def analytics_by_status():
     ]})
 
 
+@api_bp.route("/analytics/reporteria", methods=["GET"])
+@api_auth_required
+def analytics_reporteria():
+    """Reportería agregada (misma data que la vista web /reports/reporteria).
+
+    Scope por rol: manager = su equipo + él mismo; finanzas/admin = empresa.
+    Filtros: date_from, date_to (YYYY-MM-DD), cost_center_id, category_id.
+    """
+    from app.services import analytics_service
+
+    user = g.api_user
+    if not analytics_service.can_access(user):
+        return _error("Requiere rol de manager, finanzas o administrador.", status=403, code="forbidden")
+
+    filters = {
+        "date_from": request.args.get("date_from") or None,
+        "date_to": request.args.get("date_to") or None,
+        "cost_center_id": request.args.get("cost_center_id") or None,
+        "category_id": request.args.get("category_id") or None,
+    }
+
+    return _ok({
+        "kpis": analytics_service.get_kpis(user, filters),
+        "monthly": analytics_service.get_monthly_series(user, filters),
+        "by_category": analytics_service.get_by_category(user, filters),
+        "by_cost_center": analytics_service.get_by_cost_center(user, filters),
+        "by_user": analytics_service.get_by_user(user, filters),
+        "report_funnel": analytics_service.get_report_funnel(user, filters),
+        "approval_cycle": analytics_service.get_approval_cycle(user, filters),
+        "approver_workload": analytics_service.get_approver_workload(user),
+        "channels": analytics_service.get_channels(user, filters),
+        "weekday": analytics_service.get_weekday_distribution(user, filters),
+        "top_merchants": analytics_service.get_top_merchants(user, filters),
+        "compliance": analytics_service.get_compliance(user, filters),
+    })
+
+
+@api_bp.route("/analytics/reporteria/export", methods=["GET"])
+@api_auth_required
+def analytics_reporteria_export():
+    """CSV del dataset de gastos con los mismos filtros y scope que la reportería."""
+    import csv as csv_lib
+    import io
+
+    from flask import Response
+
+    from app.services import analytics_service
+
+    user = g.api_user
+    if not analytics_service.can_access(user):
+        return _error("Requiere rol de manager, finanzas o administrador.", status=403, code="forbidden")
+
+    filters = {
+        "date_from": request.args.get("date_from") or None,
+        "date_to": request.args.get("date_to") or None,
+        "cost_center_id": request.args.get("cost_center_id") or None,
+        "category_id": request.args.get("category_id") or None,
+    }
+    headers, rows = analytics_service.export_rows(user, filters)
+
+    output = io.StringIO()
+    writer = csv_lib.writer(output, delimiter=";")
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": 'attachment; filename=gastos_reporteria.csv'},
+    )
+
+
 @api_bp.route("/analytics/top-merchants", methods=["GET"])
 @api_auth_required
 def analytics_top_merchants():
