@@ -6,11 +6,13 @@ from app.extensions import db
 from app.models.report import Report, ReportSettlementType, ReportStatus
 from app.models.expense import Expense, ExpenseStatus
 from app.models.approval import ApprovalFlow, ApprovalStep, ApprovalDecision
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 from app.services.export_service import generate_report_pdf
+from app.models.category import Category
+from app.models.cost_center import CostCenter
 from app.services.notification_service import (
     notify_report_created,
     notify_approval_needed,
@@ -362,6 +364,91 @@ def index():
         },
         has_active_filters=has_active_filters,
     )
+
+@reports_bp.route('/reporteria')
+@login_required
+def reporteria():
+    from app.services import analytics_service
+
+    if not analytics_service.can_access(current_user):
+        flash('No tienes acceso a la reportería.', 'danger')
+        return redirect(url_for('dashboard.index'))
+
+    # Filtros
+    date_from = request.args.get('date_from') or (datetime.utcnow().replace(day=1)).strftime('%Y-%m-%d')
+    date_to = request.args.get('date_to') or datetime.utcnow().strftime('%Y-%m-%d')
+    filters = {
+        'date_from': date_from,
+        'date_to': date_to,
+        'cost_center_id': request.args.get('cost_center_id') or None,
+        'category_id': request.args.get('category_id') or None,
+    }
+
+    user = current_user._get_current_object()
+    data = {
+        'kpis': analytics_service.get_kpis(user, filters),
+        'monthly': analytics_service.get_monthly_series(user, filters),
+        'by_category': analytics_service.get_by_category(user, filters),
+        'by_cost_center': analytics_service.get_by_cost_center(user, filters),
+        'by_user': analytics_service.get_by_user(user, filters),
+        'funnel': analytics_service.get_report_funnel(user, filters),
+        'cycle': analytics_service.get_approval_cycle(user, filters),
+        'workload': analytics_service.get_approver_workload(user),
+        'channels': analytics_service.get_channels(user, filters),
+        'weekday': analytics_service.get_weekday_distribution(user, filters),
+        'merchants': analytics_service.get_top_merchants(user, filters),
+        'compliance': analytics_service.get_compliance(user, filters),
+    }
+
+    cost_centers = CostCenter.query.filter_by(company_id=current_user.company_id).order_by(CostCenter.name).all()
+    categories = Category.query.filter_by(company_id=current_user.company_id, is_active=True).order_by(Category.name).all()
+
+    funnel_max = max(data['funnel'].values()) if data['funnel'] else 1
+
+    return render_template(
+        'reports/reporteria.html',
+        data=data,
+        filters=filters,
+        cost_centers=cost_centers,
+        categories=categories,
+        funnel_max=funnel_max,
+        is_finance_view=(user.is_admin or user.has_finance_report_access),
+    )
+
+
+@reports_bp.route('/reporteria/export')
+@login_required
+def reporteria_export():
+    import csv as csv_lib
+    import io
+
+    from app.services import analytics_service
+
+    if not analytics_service.can_access(current_user):
+        flash('No tienes acceso a la reportería.', 'danger')
+        return redirect(url_for('dashboard.index'))
+
+    filters = {
+        'date_from': request.args.get('date_from') or None,
+        'date_to': request.args.get('date_to') or None,
+        'cost_center_id': request.args.get('cost_center_id') or None,
+        'category_id': request.args.get('category_id') or None,
+    }
+    headers, rows = analytics_service.export_rows(current_user._get_current_object(), filters)
+
+    output = io.StringIO()
+    writer = csv_lib.writer(output, delimiter=';')
+    writer.writerow(headers)
+    for row in rows:
+        writer.writerow(row)
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename=gastos_{date.today().strftime("%Y%m%d")}.csv'},
+    )
+
 
 @reports_bp.route('/new', methods=['GET', 'POST'])
 @login_required

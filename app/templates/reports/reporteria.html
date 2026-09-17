@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block title %}Reportería - {{ brand_app_name }}{% endblock %}
+
+{% block content %}
+<div class="py-6 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div>
+            <h1 class="text-2xl font-black text-gray-900 tracking-tight">Reportería</h1>
+            <p class="text-sm text-gray-500">
+                {% if is_finance_view %}Vista empresa completa{% else %}Vista equipo{% endif %}
+                · Montos en {{ data.kpis.base_currency }}
+            </p>
+        </div>
+        <a href="{{ url_for('reports.reporteria_export', **filters) }}"
+            class="btn-secondary text-sm">⬇️ Exportar CSV</a>
+    </div>
+
+    <!-- Filtros -->
+    <form method="GET" class="card p-4 mb-6 bg-white border border-gray-100 shadow-sm rounded-2xl">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Desde</label>
+                <input type="date" name="date_from" value="{{ filters.date_from }}" class="input" onchange="this.form.submit()">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Hasta</label>
+                <input type="date" name="date_to" value="{{ filters.date_to }}" class="input" onchange="this.form.submit()">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Centro de costo</label>
+                <select name="cost_center_id" class="input" onchange="this.form.submit()">
+                    <option value="">Todos</option>
+                    {% for cc in cost_centers %}
+                    <option value="{{ cc.id }}" {% if filters.cost_center_id == cc.id|string %}selected{% endif %}>{{ cc.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Categoría</label>
+                <select name="category_id" class="input" onchange="this.form.submit()">
+                    <option value="">Todas</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if filters.category_id == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="btn-primary flex-1 text-sm">Aplicar</button>
+            </div>
+        </div>
+    </form>
+
+    <!-- KPIs -->
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+        <div class="card p-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gasto total</p>
+            <p class="text-2xl font-black text-gray-900 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(data.kpis.total) }}</p>
+            <p class="text-xs mt-1 {% if data.kpis.delta_pct and data.kpis.delta_pct > 0 %}text-red-600{% elif data.kpis.delta_pct %}text-green-600{% endif %}">
+                {% if data.kpis.delta_pct is not none %}
+                {{ "+" if data.kpis.delta_pct > 0 else "" }}{{ data.kpis.delta_pct }}% vs período anterior
+                {% else %}sin comparación{% endif %}
+            </p>
+        </div>
+        <div class="card p-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Gastos</p>
+            <p class="text-2xl font-black text-gray-900 mt-1">{{ data.kpis.count }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ data.kpis.active_users }} usuarios activos</p>
+        </div>
+        <div class="card p-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ticket promedio</p>
+            <p class="text-2xl font-black text-gray-900 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(data.kpis.avg_ticket) }}</p>
+        </div>
+        {% if is_finance_view %}
+        <div class="card p-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Por pagar</p>
+            <p class="text-2xl font-black text-amber-600 mt-1">{{ currency_symbol }}{{ "{:,.0f}".format(data.kpis.to_pay_amount) }}</p>
+            <p class="text-xs text-gray-400 mt-1">{{ data.kpis.to_pay_count }} rendiciones</p>
+        </div>
+        {% endif %}
+        <div class="card p-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">En revisión</p>
+            <p class="text-2xl font-black text-blue-600 mt-1">{{ data.kpis.in_review }}</p>
+        </div>
+    </div>
+
+    <!-- Evolución + Ciclo -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl lg:col-span-2">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Evolución del gasto (mensual)</h3>
+            <canvas id="chartMonthly" height="120"></canvas>
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Ciclo de aprobación</h3>
+            <div class="space-y-3">
+                <div>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase">Tiempo promedio</p>
+                    <p class="text-xl font-black text-gray-900">{{ data.cycle.avg_days }} días</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase">Tasa de rechazo</p>
+                    <p class="text-xl font-black {% if data.cycle.rejection_rate > 20 %}text-red-600{% else %}text-gray-900{% endif %}">{{ data.cycle.rejection_rate }}%</p>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold text-gray-400 uppercase mb-1">Embudo de rendiciones</p>
+                    {% set funnel_order = [('draft','Borrador'), ('under_review','En revisión'), ('needs_info','Requiere antecedentes'), ('approved','Aprobadas'), ('rejected','Rechazadas'), ('paid','Pagadas')] %}
+                    {% for key, label in funnel_order %}
+                    {% set n = data.funnel.get(key, 0) %}
+                    {% if n %}
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="w-32 text-gray-500 truncate">{{ label }}</span>
+                        <div class="flex-1 bg-gray-100 rounded-full h-3">
+                            <div class="bg-primary rounded-full h-3" style="width: {{ (n * 100 / funnel_max) | round | int }}%"></div>
+                        </div>
+                        <span class="font-bold text-gray-700 w-6 text-right">{{ n }}</span>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Distribuciones -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Por categoría</h3>
+            <canvas id="chartCategory" height="200"></canvas>
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Por centro de costo</h3>
+            <canvas id="chartCostCenter" height="200"></canvas>
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Top usuarios</h3>
+            <canvas id="chartUsers" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Carga aprobadores + Canales + Comercios -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Carga por aprobador</h3>
+            {% if data.workload %}
+            <canvas id="chartWorkload" height="200"></canvas>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-8">Sin pendientes 🎉</p>
+            {% endif %}
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Canal de ingreso</h3>
+            <canvas id="chartChannels" height="200"></canvas>
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Top comercios</h3>
+            {% if data.merchants %}
+            <ul class="space-y-2">
+                {% for m in data.merchants %}
+                <li class="flex justify-between items-center text-sm">
+                    <span class="text-gray-700 truncate flex-1">{{ m.label }}</span>
+                    <span class="font-bold text-gray-900 ml-2">{{ currency_symbol }}{{ "{:,.0f}".format(m.total) }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% else %}
+            <p class="text-sm text-gray-400 text-center py-8">Sin datos de comercios</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Cumplimiento + Día de semana -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl lg:col-span-2">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Gasto por día de semana</h3>
+            <canvas id="chartWeekday" height="100"></canvas>
+        </div>
+        <div class="card p-5 bg-white border border-gray-100 shadow-sm rounded-2xl">
+            <h3 class="text-sm font-bold text-gray-900 mb-3">Cumplimiento</h3>
+            {% set c = data.compliance %}
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Duplicados</span>
+                    <span class="font-bold {% if c.duplicates %}text-red-600{% else %}text-green-600{% endif %}">{{ c.duplicates }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Sin comprobante</span>
+                    <span class="font-bold {% if c.no_receipt %}text-amber-600{% else %}text-green-600{% endif %}">{{ c.no_receipt }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">GPS inconsistente</span>
+                    <span class="font-bold {% if c.gps_issues %}text-amber-600{% else %}text-green-600{% endif %}">{{ c.gps_issues }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-500">Fin de semana</span>
+                    <span class="font-bold text-gray-700">{{ c.weekend }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+<script>
+    const DATA = {{ data | tojson }};
+    const CUR = "{{ currency_symbol }}";
+    const fmt = v => CUR + Math.round(v).toLocaleString('es-CL');
+
+    const palette = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777', '#65a30d', '#0284c7', '#525252'];
+    Chart.defaults.font.family = 'Inter, system-ui, sans-serif';
+    Chart.defaults.color = '#6b7280';
+
+    new Chart(document.getElementById('chartMonthly'), {
+        type: 'line',
+        data: {
+            labels: DATA.monthly.labels,
+            datasets: [{
+                label: 'Gasto mensual',
+                data: DATA.monthly.totals,
+                borderColor: '#4f46e5',
+                backgroundColor: 'rgba(79,70,229,.08)',
+                fill: true, tension: .35, borderWidth: 2.5, pointRadius: 3,
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.parsed.y) } } },
+            scales: { y: { ticks: { callback: v => CUR + (v/1000).toFixed(0) + 'k' } } }
+        }
+    });
+
+    const donut = (id, rows) => {
+        if (!rows || !rows.length) return;
+        new Chart(document.getElementById(id), {
+            type: 'doughnut',
+            data: { labels: rows.map(r => r.label), datasets: [{ data: rows.map(r => r.total), backgroundColor: palette, borderWidth: 2, borderColor: '#fff' }] },
+            options: { plugins: { tooltip: { callbacks: { label: c => `${c.label}: ${fmt(c.parsed)}` } } }, cutout: '62%' }
+        });
+    };
+    donut('chartCategory', DATA.by_category);
+    donut('chartCostCenter', DATA.by_cost_center);
+
+    if (DATA.by_user.length) {
+        new Chart(document.getElementById('chartUsers'), {
+            type: 'bar',
+            data: {
+                labels: DATA.by_user.map(r => r.label.split(' ')[0] + ' ' + (r.label.split(' ')[1] || '')),
+                datasets: [{ data: DATA.by_user.map(r => r.total), backgroundColor: '#4f46e5', borderRadius: 6 }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.parsed.x) } } }, scales: { x: { ticks: { callback: v => CUR + (v/1000).toFixed(0) + 'k' } } } }
+        });
+    }
+
+    if (DATA.workload && Object.keys(DATA.workload).length) {
+        new Chart(document.getElementById('chartWorkload'), {
+            type: 'bar',
+            data: {
+                labels: Object.keys(DATA.workload),
+                datasets: [{ data: Object.values(DATA.workload), backgroundColor: '#0891b2', borderRadius: 6 }]
+            },
+            options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ticks: { precision: 0 } } } }
+        });
+    }
+
+    new Chart(document.getElementById('chartChannels'), {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(DATA.channels).map(k => k === 'whatsapp' ? 'WhatsApp' : 'Web'),
+            datasets: [{ data: Object.values(DATA.channels), backgroundColor: ['#25d366', '#4f46e5'], borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: { plugins: { tooltip: { callbacks: { label: c => `${c.label}: ${c.parsed} gastos` } } }, cutout: '62%' }
+    });
+
+    new Chart(document.getElementById('chartWeekday'), {
+        type: 'bar',
+        data: {
+            labels: DATA.weekday.labels,
+            datasets: [{ data: DATA.weekday.totals, backgroundColor: DATA.weekday.labels.map(l => (l === 'Sáb' || l === 'Dom') ? '#d97706' : '#4f46e5'), borderRadius: 6 }]
+        },
+        options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmt(c.parsed.y) } } }, scales: { y: { ticks: { callback: v => CUR + (v/1000).toFixed(0) + 'k' } } } }
+    });
+</script>
+{% endblock %}

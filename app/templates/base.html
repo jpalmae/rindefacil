@@ -353,7 +353,11 @@
                         <a href="{{ url_for('expenses.index') }}"
                             class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Gastos</a>
                         <a href="{{ url_for('reports.index') }}"
-                            class="{{ 'border-primary text-gray-900' if 'reports' in endpoint else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Rendiciones</a>
+                            class="{{ 'border-primary text-gray-900' if endpoint == 'reports.index' else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Rendiciones</a>
+                        {% if current_user.is_admin or current_user.has_role('manager') or current_user.has_finance_report_access %}
+                        <a href="{{ url_for('reports.reporteria') }}"
+                            class="{{ 'border-primary text-gray-900' if endpoint == 'reports.reporteria' else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Reportería</a>
+                        {% endif %}
                         {% if current_user.is_admin %}
                         <a href="{{ url_for('admin.index') }}"
                             class="{{ 'border-primary text-gray-900' if 'admin' in endpoint else 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' }} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Panel
