@@ -147,8 +147,13 @@ def get_kpis(user, filters):
 # ---------------------------------------------------------------------------
 
 def get_monthly_series(user, filters, months=12):
+    """Serie mensual de los últimos 12 meses hasta date_to del filtro.
+
+    Ignora date_from a propósito: con un filtro de mes actual la serie
+    tendría un solo punto y el gráfico parecería vacío.
+    """
     date_to = _parse_date(filters.get("date_to")) or date.today()
-    date_from = _parse_date(filters.get("date_from")) or (date_to - timedelta(days=365))
+    date_from = date_to - timedelta(days=365)
 
     q = _apply_filters(db.session.query(Expense), user, {**filters, "date_from": date_from.isoformat()})
     year_e = func.extract("year", Expense.date)
