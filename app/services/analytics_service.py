@@ -151,20 +151,22 @@ def get_monthly_series(user, filters, months=12):
     date_from = _parse_date(filters.get("date_from")) or (date_to - timedelta(days=365))
 
     q = _apply_filters(db.session.query(Expense), user, {**filters, "date_from": date_from.isoformat()})
+    year_e = func.extract("year", Expense.date)
+    month_e = func.extract("month", Expense.date)
     rows = (
         q.with_entities(
-            func.to_char(Expense.date, "YYYY-MM"),
+            year_e, month_e,
             func.coalesce(func.sum(Expense.amount_clp), 0),
             func.count(Expense.id),
         )
-        .group_by(func.to_char(Expense.date, "YYYY-MM"))
-        .order_by(func.to_char(Expense.date, "YYYY-MM"))
+        .group_by(year_e, month_e)
+        .order_by(year_e, month_e)
         .all()
     )
     return {
-        "labels": [r[0] for r in rows],
-        "totals": [_money(r[1]) for r in rows],
-        "counts": [r[2] for r in rows],
+        "labels": [f"{int(r[0])}-{int(r[1]):02d}" for r in rows],
+        "totals": [_money(r[2]) for r in rows],
+        "counts": [r[3] for r in rows],
     }
 
 
