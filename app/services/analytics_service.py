@@ -258,7 +258,7 @@ def get_approval_cycle(user, filters):
     decision_sub = (
         db.session.query(
             ApprovalDecision.report_id,
-            func.max(ApprovalDecision.created_at).label("last_decision"),
+            func.max(ApprovalDecision.decided_at).label("last_decision"),
         )
         .group_by(ApprovalDecision.report_id)
         .subquery()
