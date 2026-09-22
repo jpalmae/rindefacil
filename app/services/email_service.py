@@ -2,6 +2,8 @@ from flask_mail import Message
 from app.extensions import mail
 from flask import current_app, has_request_context
 from flask_login import current_user
+import os
+
 import requests
 from app.services.secrets_service import decrypt_setting
 
@@ -73,6 +75,27 @@ def _company_branding(company=None):
     logo_url = settings.get('brand_logo_url') or ''
 
     return app_name, base_url.rstrip('/'), _absolute_brand_asset_url(logo_url, base_url)
+
+
+def _local_logo_path(company=None):
+    """Ruta local del logo si existe en UPLOAD_FOLDER (para incrustar por CID).
+
+    Los proxys de imagen de algunos clientes de correo rompen las URLs
+    remotas; el attachment inline (cid:) es universal.
+    """
+    import os
+    settings = (company.settings or {}) if company is not None else {}
+    logo = settings.get('brand_logo_url') or ''
+    if not logo:
+        return None
+    # "/static/uploads/x.png" o "https://dominio/static/uploads/x.png"
+    marker = '/static/uploads/'
+    idx = logo.find(marker)
+    if idx == -1:
+        return None
+    rel = logo[idx + 1:]  # static/uploads/x.png
+    path = os.path.join(current_app.config['UPLOAD_FOLDER'], os.path.relpath(rel, 'static/uploads'))
+    return path if os.path.isfile(path) else None
 
 
 def _company_email_theme(company=None):
@@ -168,6 +191,9 @@ def _render_email_html(
     eyebrow=None,
 ):
     app_name, _, logo_url = _company_branding(company)
+    # Preferir attachment inline (cid:) si el archivo existe localmente
+    if _local_logo_path(company):
+        logo_url = 'cid:brand-logo'
     return current_app.jinja_env.get_template('emails/notification.html').render(
         app_name=app_name,
         logo_url=logo_url,
@@ -233,6 +259,24 @@ def _send_via_resend(company, subject, recipients, body_text, body_html=None, re
         payload['html'] = body_html
     if reply_to or config['reply_to']:
         payload['reply_to'] = reply_to or config['reply_to']
+
+    # Logo incrustado como attachment inline (cid:brand-logo) — inmune a
+    # proxys de imagen de los clientes de correo
+    try:
+        logo_path = _local_logo_path(company)
+        if logo_path and body_html and 'cid:brand-logo' in body_html:
+            import base64
+            import mimetypes
+            with open(logo_path, 'rb') as fh:
+                content_b64 = base64.b64encode(fh.read()).decode('ascii')
+            payload['attachments'] = [{
+                'filename': os.path.basename(logo_path),
+                'content': content_b64,
+                'content_type': mimetypes.guess_type(logo_path)[0] or 'image/png',
+                'content_id': 'brand-logo',
+            }]
+    except Exception as exc:
+        current_app.logger.warning('No se pudo incrustar el logo inline: %s', exc)
 
     try:
         response = requests.post(
