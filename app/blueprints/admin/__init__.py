@@ -732,10 +732,11 @@ def email_settings_test():
         flash('Debes indicar un destinatario para la prueba.', 'warning')
         return redirect(url_for('admin.email_settings'))
 
-    if send_test_email(company, recipient):
+    sent, detail = send_test_email(company, recipient)
+    if sent:
         flash(f'Correo de prueba enviado a {recipient}.', 'success')
     else:
-        flash('No fue posible enviar el correo de prueba. Revisa la configuración de Resend.', 'danger')
+        flash(f'No fue posible enviar el correo de prueba: {detail}', 'danger')
 
     return redirect(url_for('admin.email_settings'))
 

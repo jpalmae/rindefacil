@@ -216,9 +216,11 @@ def _send_via_resend(company, subject, recipients, body_text, body_html=None, re
     api_key = config['resend_api_key']
     if not api_key:
         current_app.logger.warning('Resend API key missing. Skip sending email.')
+        _set_last_email_error('Falta la API key de Resend.')
         return False
     if not config['from_address']:
         current_app.logger.warning('Resend sender address missing. Skip sending email.')
+        _set_last_email_error('Falta la dirección remitente (From).')
         return False
 
     payload = {
@@ -243,11 +245,14 @@ def _send_via_resend(company, subject, recipients, body_text, body_html=None, re
             timeout=20,
         )
         if response.status_code not in (200, 201):
-            current_app.logger.error(f'Resend error {response.status_code}: {response.text}')
+            detail = response.text[:300]
+            current_app.logger.error(f'Resend error {response.status_code}: {detail}')
+            _set_last_email_error(f'Resend {response.status_code}: {detail}')
             return False
         return True
     except Exception as e:
         current_app.logger.error(f'Error sending email via Resend: {str(e)}')
+        _set_last_email_error(f'Error de conexión con Resend: {e}')
         return False
 
 
@@ -303,9 +308,31 @@ def send_email(subject, recipients, body_text, body_html=None, company=None, rep
     return _send_via_smtp(branded_subject, recipients, final_body_text, body_html=final_body_html)
 
 
+def _set_last_email_error(message):
+    """Guarda el último error de envío para mostrarlo en el flujo de prueba."""
+    from flask import g
+    try:
+        g.email_last_error = message
+    except RuntimeError:
+        pass  # fuera de contexto de request (p.ej. bot): solo queda el log
+
+
 def send_test_email(company, recipient):
+    """Envía el correo de prueba forzando el uso de la config de Resend.
+
+    Devuelve (ok, detalle). El test no depende del interruptor general de
+    notificaciones: valida que la API key y el remitente funcionen.
+    """
+    _set_last_email_error(None)
     if not recipient:
-        return False
+        return False, 'Falta el destinatario de prueba.'
+
+    config = _company_email_settings(company)
+    if not config['resend_api_key']:
+        return False, 'Falta guardar la API key de Resend.'
+    if not config['from_address']:
+        return False, 'Falta la dirección remitente (From).'
+
     app_name, _, _ = _company_branding(company)
     subject = 'Prueba de configuración de email'
     body_text = (
@@ -323,7 +350,16 @@ def send_test_email(company, recipient):
         ],
         preheader='Prueba de configuración de email',
     )
-    return send_email(subject, [recipient], body_text, body_html=body_html, company=company)
+    ok = send_email(subject, [recipient], body_text, body_html=body_html, company=company, force_send=True)
+    if ok:
+        return True, None
+
+    from flask import g
+    try:
+        detail = g.get('email_last_error')
+    except RuntimeError:
+        detail = None
+    return False, detail or 'El envío falló. Revisa los logs de la aplicación.'
 
 
 def send_report_created_email(user, report):
