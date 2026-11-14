@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # Evitar que Python escriba archivos .pyc en disco y forzar la salida stdout/stderr (útil para logs en Docker)
 ENV PYTHONDONTWRITEBYTECODE=1
