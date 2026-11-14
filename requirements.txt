@@ -1,24 +1,24 @@
 # Core
-Flask==3.1.0
+Flask==3.1.3
 Flask-Login==0.6.3
 Flask-SQLAlchemy==3.1.1
-Flask-Migrate==4.0.7
+Flask-Migrate==4.1.0
 Flask-Mail==0.10.0
 Flask-CORS==4.0.1
 Flask-Limiter==3.9.0
 
 # Database
-SQLAlchemy==2.0.36
+SQLAlchemy==2.1.8
 psycopg[binary]
-alembic==1.14.0
+alembic==1.20.1
 
 # Auth
-PyJWT==2.10.0
+PyJWT==2.15.1
 bcrypt==4.2.1
-authlib==1.4.0   # OAuth2
+authlib==1.9.5   # OAuth2
 
 # Storage
-minio==7.2.12
+minio==7.2.20
 Pillow==11.0.0
 
 # AI / OCR
@@ -31,11 +31,11 @@ WeasyPrint==65.0
 reportlab==4.3.0
 
 # Utils
-python-dotenv==1.0.1
+python-dotenv==1.2.4
 marshmallow==3.23.1  # serialización
-click==8.1.8
+click==8.5.1
 gunicorn==23.0.0
 gevent==24.11.1
 imagehash==4.3.2     # pHash para detección duplicados
-requests==2.32.3
+requests==2.34.2
 cryptography==45.0.4
