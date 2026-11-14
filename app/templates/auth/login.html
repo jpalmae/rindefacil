@@ -72,6 +72,8 @@
                 <p>¿No tienes cuenta? <a href="{{ url_for('auth.register') }}"
                         class="text-primary hover:text-primary-dark font-semibold">Regístrate</a></p>
             </div>
+
+            <p class="mt-4 text-center text-[10px] text-gray-400">v{{ build_info.version }} · {{ build_info.git_sha }}</p>
         </div>
     </div>
 </div>

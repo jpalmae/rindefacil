@@ -728,7 +728,35 @@ def api_auth_required(view_func):
 
 @api_bp.route("/health", methods=["GET"])
 def health():
-    return _ok({"status": "ok", "service": "rinde-api"})
+    from app.version import get_build_info
+
+    return _ok({"status": "ok", "service": "rinde-api", **get_build_info()})
+
+
+@api_bp.route("/version", methods=["GET"])
+def version():
+    import os
+
+    from app.version import get_build_info
+
+    info = get_build_info()
+    info["environment"] = os.environ.get("FLASK_ENV", "production")
+    return _ok(info)
+
+
+@api_bp.app_context_processor
+def _inject_build_info():
+    from app.version import get_build_info
+
+    return {"build_info": get_build_info()}
+
+
+@api_bp.record_once
+def _log_version_on_start(state):
+    from app.version import get_build_info
+
+    info = get_build_info()
+    state.app.logger.info("Rinde Fácil v%s (git %s)", info["version"], info["git_sha"])
 
 
 @api_bp.route("/auth/token", methods=["POST"])

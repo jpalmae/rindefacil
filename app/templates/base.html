@@ -468,6 +468,7 @@
                             <div class="px-4 py-2 border-b border-gray-100">
                                 <p class="text-sm font-medium text-gray-900 truncate">{{ current_user.full_name }}</p>
                                 <p class="text-xs text-gray-500 truncate">{{ current_user.email }}</p>
+                                <p class="text-[10px] text-gray-400 mt-0.5">v{{ build_info.version }} · {{ build_info.git_sha }}</p>
                             </div>
                             <a href="{{ url_for('auth.profile') }}"
                                 class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mi Perfil</a>
