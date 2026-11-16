@@ -22,7 +22,7 @@ minio==7.2.20
 Pillow==11.0.0
 
 # AI / OCR
-openai==1.58.0   # compatible con OpenRouter
+openai==3.50.0   # compatible con OpenRouter
 pypdfium2==4.30.0
 
 # Export
