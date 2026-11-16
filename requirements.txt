@@ -19,7 +19,7 @@ authlib==1.9.5   # OAuth2
 
 # Storage
 minio==7.2.20
-Pillow==11.0.0
+Pillow==13.0.0
 
 # AI / OCR
 openai==1.58.0   # compatible con OpenRouter
