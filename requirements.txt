@@ -15,14 +15,14 @@ alembic==1.20.1
 # Auth
 PyJWT==2.15.1
 bcrypt==5.0.0
-authlib==1.9.5   # OAuth2
+authlib==1.9.8   # OAuth2
 
 # Storage
 minio==7.2.20
 Pillow==13.0.0
 
 # AI / OCR
-openai==3.50.0   # compatible con OpenRouter
+openai==3.51.0   # compatible con OpenRouter
 pypdfium2==5.15.2
 
 # Export
